@@ -1,5 +1,6 @@
 import dataclasses
 from dataclasses import dataclass
+from typing import List, Sequence, Iterable, Set, Dict, Tuple, NamedTuple
 from unittest import mock
 from unittest.mock import Mock, call
 
@@ -30,16 +31,23 @@ class HasDependency:
 @attr.dataclass
 class MyAttr:
     dep: Dependency
-    no_init: attr.ib(init=False)
+    no_init: int = attr.ib(init=False)
     a: int = 4
     b: list = attr.ib(factory=list)
+
 
 @dataclasses.dataclass
 class MyAttr:
     dep: Dependency
-    no_init: dataclasses.field(init=False)
+    no_init: int = dataclasses.field(init=False)
     a: int = 4
     b: list = attr.ib(factory=list)
+
+
+@pytest.fixture
+def repo():
+    return gimme._Repository(plugins=[gimme.DefaultResolver()])
+
 
 def test_can_get_class_without_dependencies():
     assert isinstance(gimme.that(SimpleClass), SimpleClass)
@@ -55,47 +63,45 @@ def test_can_get_class_with_requirement():
     assert isinstance(inst.dep, Dependency)
 
 
-@pytest.mark.xfail
 def test_can_get_attrs_class():
     inst = gimme.that(MyAttr)
     assert isinstance(inst.dep, Dependency)
 
-@pytest.mark.xfail
+
 def test_can_get_dataclass():
     inst = gimme.that(MyAttr)
     assert isinstance(inst.dep, Dependency)
 
-class TestRepositoryCreation:
+
+def test_base_plugin_cant_resolve():
+    plugin = gimme.Resolver()
+    with pytest.raises(gimme.CannotResolve):
+        plugin.create(object, Mock())
+
+
+class TestRepositorySetup:
     def test_global_repo_contains_instance_of_one(self):
         assert gimme._Repository in gimme._repository
 
-    def test_default_repository_has_default_plugins(self):
+    def test_default_repository_has_default_resolvers(self):
         default_repo = gimme._repository.get(gimme._Repository)
 
-        assert len(default_repo.plugins) == 2
-        for plugin, cls in zip(
-            default_repo.plugins, [gimme.TypeHintingPlugin, gimme.DefaultPlugin]
-        ):
-            assert isinstance(plugin, cls)
+        resolver_types = [type(res) for res in default_repo.resolvers]
+        assert resolver_types == [gimme.TypeHintingResolver]
 
-    def test_additional_plugins_are_prepended_to_default_plugins(self):
-        plugin = object()
-        repo = gimme._Repository(plugins=(plugin,))
-        assert len(repo.plugins) == 3
-        assert repo.plugins[0] is plugin
-
-    def test_can_prevent_using_default_plugins(self):
-        repo = gimme._Repository(use_default_plugins=False)
-        assert len(repo.plugins) == 0
+    def test_can_add_resolvers(self):
+        default_repo = gimme.current_repo()
+        curr_len = len(default_repo.resolvers)
+        obj = object()
+        default_repo.add_resolver(obj)
+        assert default_repo.resolvers[0] is obj
+        assert len(default_repo.resolvers) == 1 + curr_len
+        default_repo.resolvers.remove(obj)
 
 
 class TestRepository:
     class MyList(list):
         ...
-
-    @pytest.fixture
-    def repo(self):
-        return gimme._Repository(plugins=[gimme.DefaultPlugin()], use_default_plugins=False)
 
     @pytest.fixture
     def dependency_info(self):
@@ -137,19 +143,17 @@ class TestRepository:
 
         assert repo.types_by_str == {
             "MyList": MyList,
-            "list": MyList,
-            "object": MyList,
+            "list": list,
+            "object": object,
         }
         info = gimme.DependencyInfo(MyList, MyList)
         assert repo.types == {MyList: info, list: info, object: info}
 
-    def test_can_lookup_class_by_string(self, repo):
-        cls = object()
-        repo.types_by_str["cls"] = cls
-        with mock.patch.object(repo, "create") as create:
-            repo.get("cls")
+    def test_can_lookup_obj_by_string(self, repo):
+        obj = object()
+        repo.add(obj)
 
-        assert create.call_args == call(cls)
+        assert repo.get("object") is obj
 
     def test_raises_on_unknown_class_string(self, repo):
         with pytest.raises(gimme.CannotResolve):
@@ -165,7 +169,7 @@ class TestRepository:
 
     def test_create_calls_plugin_with_factory_and_kwargs(self, repo, dependency_info):
         plugin = Mock()
-        repo.plugins = [plugin]
+        repo.resolvers = [plugin]
         repo.types[object] = dependency_info
         repo.create(object)
         assert plugin.create.call_args == call(
@@ -175,16 +179,106 @@ class TestRepository:
     def test_create_moves_to_next_plugin_on_CannotResolve(
         self, repo, dependency_info, failing_plugin
     ):
-        repo.plugins = [failing_plugin, Mock()]
+        repo.resolvers = [failing_plugin, Mock()]
         repo.types[object] = dependency_info
         repo.create(object)
-        for plugin in repo.plugins:
+        for plugin in repo.resolvers:
             assert plugin.create.call_args == call(
                 dependency_info.factory, repo, dependency_info.kwargs
             )
 
     def test_raises_when_no_plugin_can_resolve_dependency(self, repo, failing_plugin):
-        repo.plugins = [failing_plugin, failing_plugin]
+        repo.resolvers = [failing_plugin, failing_plugin]
         with pytest.raises(gimme.CannotResolve) as e:
             repo.get(object)
         assert str(e.value) == str(object)
+
+
+class TestWhenMultipleHaveBeenRegistered:
+    def test_can_get_multiple_when_multiple_have_been_added(self, repo):
+        repo.add(SimpleClass())
+        repo.add(SimpleClass())
+
+        instances = repo.get(SimpleClass, many=True)
+        assert isinstance(instances, list)
+        assert len(instances) == 2
+
+    def test_get_latest_when_asking_for_one(self, repo):
+        a = SimpleClass()
+        repo.add(SimpleClass())
+        repo.add(a)
+        assert repo.get(SimpleClass, many=False) is a
+
+    def test_can_get_multiple_derived_instances(self, repo):
+        class Base:
+            ...
+
+        class DerivedA(Base):
+            ...
+
+        class DerivedB(Base):
+            ...
+
+        repo.add(DerivedA())
+        repo.add(DerivedB())
+
+        instances = repo.get(Base, many=True)
+        assert isinstance(instances, list)
+        assert len(instances) == 2
+        for inst, cls in zip(instances, [DerivedA, DerivedB]):
+            assert isinstance(inst, cls)
+
+
+def test_circular_dependencies(repo):
+    class A:
+        def __init__(self, c: "C"):
+            ...
+
+    class B:
+        def __init__(self, a: A):
+            ...
+
+    @repo.register
+    class C:
+        def __init__(self, b: B):
+            ...
+
+    repo.add_resolver(gimme.TypeHintingResolver())
+    with pytest.raises(gimme.CircularDependeny) as err:
+        repo.get(A)
+    assert str(err.value) == "A -> C -> B"
+
+
+def test_lookup_stack_is_cleared_after_successful_get(repo):
+    repo.get(SimpleClass)
+    assert not repo.lookup_stack
+
+
+def test_lookup_stack_is_cleared_after_unsucessful_get(repo):
+    with pytest.raises(gimme.CannotResolve):
+        repo.get("Invalid")
+    assert not repo.lookup_stack
+
+
+@pytest.mark.parametrize(
+    "hint,expected",
+    [
+        (List[int], list),
+        (Sequence[int], list),
+        (Iterable[int], list),
+        (Set[int], set),
+        (List, None),
+        (Dict[int, int], None),
+        (List[List[int]], None),
+        (Tuple[int, ...], tuple),
+        (Tuple[int, int], None),
+        (list, None),
+        (NamedTuple("Tuple", [("field", int)]), None),
+    ],
+)
+def test_can_parse_collection(hint, expected):
+    result = gimme.parse_collection_from_type_hint(hint)
+    if expected is not None:
+        result = result.collection
+
+    assert result is expected

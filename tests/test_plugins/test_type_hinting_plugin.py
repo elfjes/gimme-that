@@ -1,14 +1,15 @@
+from typing import Tuple
 from unittest import mock
 from unittest.mock import Mock, call
 
 import pytest
 
-from gimme import TypeHintingPlugin, CannotResolve
+from gimme import TypeHintingResolver, CannotResolve
 
 
 @pytest.fixture
 def plugin():
-    return TypeHintingPlugin()
+    return TypeHintingResolver()
 
 
 def test_can_create_with_deps_and_kwargs(plugin):
@@ -72,3 +73,13 @@ def test_get_dependencies_for_function(plugin):
     repo = Mock()
     assert plugin.get_dependencies(function, repo).keys() == {"a", "b", "d"}
     assert repo.get.call_args_list == [call(int), call(str), call(set)]
+
+
+def test_get_dependencies_with_generic_type(plugin):
+    def function(a: Tuple[int, ...]):
+        pass
+
+    repo = Mock()
+    repo.get.return_value = [1, 2]
+    assert plugin.get_dependencies(function, repo) == {"a": (1, 2)}
+    assert repo.get.call_args_list == [call(int, many=True)]

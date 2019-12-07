@@ -1,16 +1,7 @@
+import collections
 import inspect
 from collections import namedtuple
-from typing import (
-    Type,
-    Union,
-    TypeVar,
-    Iterable,
-    List,
-    Dict,
-    Callable,
-    Optional,
-    Any,
-)
+from typing import Type, Union, TypeVar, Iterable, List, Dict, Callable, Any, Optional, ForwardRef
 
 T = TypeVar("T")
 
@@ -50,6 +41,10 @@ def setup(clean_up=False):
     """Setup and configure your Repository"""
 
 
+def add_resolver(resolver: "Resolver"):
+    _repository.get(_Repository).add_resolver(resolver)
+
+
 def remove(obj):
     ...
 
@@ -60,6 +55,7 @@ def current_repo():
 
 EMPTY = object()
 DependencyInfo = namedtuple("DependencyInfo", ["cls", "factory", "kwargs"], defaults=(None,))
+TypeHintInfo = namedtuple("TypeHintInfo", ["collection", "inner_type"])
 
 
 class CannotResolve(Exception):
@@ -70,7 +66,11 @@ class PartiallyResolved(Exception):
     pass
 
 
-class BasePlugin:
+class CircularDependeny(Exception):
+    pass
+
+
+class Resolver:
     def create(
         self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
     ) -> T:
@@ -85,8 +85,7 @@ class BasePlugin:
         raise CannotResolve()
 
 
-class TypeHintingPlugin(BasePlugin):
-    # TODO check that kwargs are actually parameters
+class TypeHintingResolver(Resolver):
     def get_dependencies(
         self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
     ) -> Dict[str, Any]:
@@ -98,93 +97,85 @@ class TypeHintingPlugin(BasePlugin):
         for key, param in signature.parameters.items():
             if key in kwargs or param.default is not inspect.Parameter.empty:
                 continue
-            if param.annotation is inspect.Parameter.empty:
+            annotation = param.annotation
+            if annotation is inspect.Parameter.empty:
                 raise CannotResolve(key)
+            if hasattr(annotation, "__origin__"):
+                info = parse_collection_from_type_hint(annotation)
+                if info:
+                    dependencies[key] = info.collection(repository.get(info.inner_type, many=True))
+                    continue
+                else:
+                    raise CannotResolve(key, param.annotation)
             dependencies[key] = repository.get(param.annotation)
         return dependencies
 
 
-class DefaultPlugin(BasePlugin):
+class DefaultResolver(Resolver):
     def get_dependencies(
         self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
     ) -> Dict[str, Any]:
         return {}
 
 
-class DataclassPlugin(BasePlugin):
-    def create(
-        self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
-    ) -> T:
-        kwargs = kwargs or {}
-        deps = self.get_dependencies(factory, repository, kwargs)
-        deps.update(kwargs)
-        return factory(**deps)
+class _LookupStack(list):
+    def push(self, item):
+        self.append(item)
+        return self
 
-    def get_dependencies(
-        self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
-    ) -> Dict[str, Any]:
-        from dataclasses import is_dataclass, MISSING, fields
+    def __enter__(self):
+        return self
 
-        if not (is_dataclass(factory) and isinstance(factory, type)):
-            raise CannotResolve()
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.pop()
 
-        kwargs = kwargs or {}
-        dependencies = {}
-        for field in fields(factory):
-            if (
-                field.name in kwargs
-                or not field.init
-                or field.default is not MISSING
-                or field.default_factory is not MISSING
-            ):
-                continue
-            dependencies[field.name] = repository.get(field.type)
-        return dependencies
+    def __str__(self):
 
+        return " -> ".join(getattr(i, "__name__", str(i)) for i in self)
 
-class AttributePlugin(BasePlugin):
-    ...
-
-
-# TODO: Detect circular dependencies
-# TODO: Support adding and retrieving Sequence of dependencies (for use with plugins)
+# TODO: Layer repositories in contexts
 class _Repository:
-    def __init__(self, plugins: Iterable["BasePlugin"] = EMPTY, use_default_plugins=True):
-        if plugins is EMPTY:
-            plugins = []
+    def __init__(self, plugins: Iterable["Resolver"]):
 
-        self.plugins: List["BasePlugin"] = list(plugins)
-        if use_default_plugins:
-            self.plugins.extend([TypeHintingPlugin(), DefaultPlugin()])
-
+        self.resolvers: List["Resolver"] = list(plugins)
         self.types_by_str: Dict[str, Type[T]] = {}
         self.types: Dict[Type, DependencyInfo] = {}
-        self.instances: Dict[Type[T], T] = {}
+        self.instances: Dict[Type[T], List[T]] = {}
+        self.lookup_stack = _LookupStack()
 
-    def get(self, key: Union[Type[T], str]) -> T:
+    def get(self, key: Union[Type[T], str], many=False) -> Union[List[T], T]:
         if isinstance(key, str):
             key = self.types_by_str.get(key)
         if key is None:
             raise CannotResolve(f"Could not resolve for key {key}")
 
-        if key in self.instances:
-            return self.instances[key]
+        if key not in self.instances:
+            self.create(key)
 
-        return self.create(key)
+        instances = self.instances[key]
+        if many:
+            return instances
+        else:
+            return instances[-1]
 
     def create(self, key: Type[T]) -> T:
+        if not isinstance(key, type):
+            raise TypeError(f"Can only create classes, not {key}")
+        if key in self.lookup_stack:
+            raise CircularDependeny(str(self.lookup_stack))
         info = self._ensure_info(key)
         inst = EMPTY
-        for plugin in self.plugins:
-            try:
-                inst = plugin.create(info.factory, self, info.kwargs)
-            except CannotResolve:
-                continue
-            break
-        if inst is EMPTY:
-            raise CannotResolve(str(key))
-        self.add(inst)
-        return inst
+        with self.lookup_stack.push(key):
+            for plugin in self.resolvers:
+                try:
+                    inst = plugin.create(info.factory, self, info.kwargs)
+                except CannotResolve:
+                    continue
+                break
+            if inst is EMPTY:
+                raise CannotResolve(self.lookup_stack)
+            self.add(inst)
+            return inst
 
     def _ensure_info(self, cls: Type[T]) -> DependencyInfo:
         info = self.types.get(cls)
@@ -194,43 +185,79 @@ class _Repository:
         return self._ensure_info(cls)
 
     def add(self, inst, deep=True):
+        def append_instance_to(key):
+            if key not in self.instances:
+                self.instances[key] = []
+            self.instances[key].append(inst)
+
         cls = type(inst)
         self.register(cls)
-        self.instances[cls] = inst
+        append_instance_to(cls)
         if deep:
             for base in cls.__mro__[1:]:
-                self.instances[base] = inst
+                append_instance_to(base)
 
     def register(self, cls: Type[T], factory: Callable = None, kwargs=None):
+        if not isinstance(cls, type):
+            raise TypeError(f"Can only register classes, not {cls}")
         if factory is None:
             factory = cls
         for base in cls.__mro__:
             if base not in self.types:
                 key = base.__name__
-                self.types_by_str[key] = cls
+                self.types_by_str[key] = base
                 self.types[base] = DependencyInfo(cls=cls, factory=factory, kwargs=kwargs)
 
-    # TODO Maybe remove
-    def _as_type(self, key: Union[Type[T], str]) -> Optional[Type[T]]:
-        if isinstance(key, str):
-            return self.types_by_str.get(key)
-        return key
-
-    # TODO Maybe remove
-    @staticmethod
-    def _as_str(cls_or_name: Union[Type, str]) -> str:
-        if isinstance(cls_or_name, type):
-            return cls_or_name.__name__
-        elif isinstance(cls_or_name, str):
-            return cls_or_name
-        else:
-            raise TypeError("types must be given as a class or a string")
+    def add_resolver(self, resolver: Resolver):
+        self.resolvers.insert(0, resolver)
 
     def __contains__(self, item: Type):
         return item in self.instances
 
 
-_repository = _Repository()
+def is_generic_type_hint(hint):
+    return hasattr(hint, "__origin__")
+
+
+def parse_collection_from_type_hint(hint) -> Optional[TypeHintInfo]:
+    """
+    Get the constructor for iterable/sequence type hints:
+    returns the concrete type belonging to the type hint, ie `set` for `typing.Set`
+
+    for the abstract type hints typing.Iterable
+    :param hint: A Generic Type hint
+    :returns: TypeHintInfo, or None if it could not be parsed into a list-like collection of
+    `type`. eg for nested generic types (`List[List[int]])
+    """
+    # hint must be a Type hint of type Iterable, but not a Mapping
+    if (
+        not is_generic_type_hint(hint)
+        or not issubclass(hint.__origin__, collections.abc.Iterable)
+        or issubclass(hint.__origin__, collections.abc.Mapping)
+    ):
+        return None
+
+    collection = hint.__origin__
+    if issubclass(collection, tuple):
+        # Must be variable length tuple
+        if len(hint.__args__) != 2 or hint.__args__[1] != Ellipsis:
+            return None
+    elif len(hint.__args__) != 1:
+        return None
+    if collection in vars(collections.abc).values():
+        collection = list
+
+    inner_type = hint.__args__[0]
+    if isinstance(inner_type, ForwardRef):
+        inner_type = inner_type.__forward_arg__
+    if not isinstance(inner_type, (str, type)):
+        return None
+
+    return TypeHintInfo(collection, inner_type)
+
+
+_repository = _Repository(plugins=[TypeHintingResolver(), DefaultResolver()])
+_repository.add(TypeHintingResolver())
 
 # Some aliases for professional (ie. boring) people
 get = that
