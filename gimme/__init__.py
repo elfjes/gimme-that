@@ -27,7 +27,6 @@ def dependency(cls: Type[T]) -> Type[T]:
     return cls
 
 
-# TODO: add functionality for not storing objects
 def register(cls: Type[T] = None, factory=None, info=None, store=True, kwargs=None):
     """
     :param cls:
