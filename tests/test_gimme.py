@@ -211,6 +211,9 @@ class TestRepository:
             repo.get(object)
         assert str(e.value) == "object"
 
+    def test_gets_multiple_instances_when_not_storing(self,repo):
+        repo.register(SimpleClass, store=False)
+        assert repo.get(SimpleClass) is not repo.get(SimpleClass)
 
 class TestWhenMultipleHaveBeenRegistered:
     def test_can_get_multiple_when_multiple_have_been_added(self, repo):

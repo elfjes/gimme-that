@@ -32,6 +32,7 @@ def register(cls: Type[T] = None, factory=None, info=None, store=True, kwargs=No
     """
     :param cls:
     :param factory: Optional factory to create an instance
+    :param info:
     :param store:
     :param kwargs: additional keyword arguments to pass to the factory (or cls.__init__) for
         construction
@@ -133,7 +134,8 @@ class SimpleRepository:
             return self.instances.get(key, [])
 
         if key not in self.instances:
-            self.create(key, repo=repo)
+            inst = self.create(key, repo=repo)
+            return inst
 
         instances = self.instances[key]
         return instances[-1]
@@ -155,7 +157,8 @@ class SimpleRepository:
                 break
             if inst is EMPTY:
                 raise CannotResolve(str(self.lookup_stack))
-            self.add(inst)
+            if info.store:
+                self.add(inst)
             return inst
 
     def _ensure_info(self, cls: Type[T]) -> DependencyInfo:
