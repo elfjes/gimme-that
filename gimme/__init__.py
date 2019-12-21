@@ -7,68 +7,81 @@ from typing import Type, Union, TypeVar, Iterable, List, Dict, Callable, Any, Op
 T = TypeVar("T")
 
 
-def add(obj, deep=True):
-    return _repository.get(_LayeredRepository).add(obj, deep=deep)
-
-
 def that(cls_or_str: Union[Type[T], str]) -> T:
-    return _repository.get(_LayeredRepository).get(cls_or_str)
+    """Request an object either by type or by type name"""
+    return current_repo().get(cls_or_str)
 
 
 def later(cls_or_str, *, lazy=True):
     """For use with descriptor based injection, allows for lazy evaluation of dependency"""
-    ...
+    return Attribute(cls_or_str, lazy=lazy)
+
+
+def add(obj, deep=True):
+    return current_repo().add(obj, deep=deep)
 
 
 def dependency(cls: Type[T]) -> Type[T]:
     """Either use as a decorator to register a class, or use during configuration"""
-    _repository.get(_LayeredRepository).register(cls)
+    current_repo().register(cls)
     return cls
 
 
 # TODO: add functionality for not storing objects
-def register(cls: Type[T], obj=None, factory=None, **kwargs):
+def register(cls: Type[T] = None, factory=None, info=None, store=True, kwargs=None):
     """
     :param cls:
-    :param obj: Optional instance of type cls to add
     :param factory: Optional factory to create an instance
+    :param store:
     :param kwargs: additional keyword arguments to pass to the factory (or cls.__init__) for
         construction
     """
+    current_repo().register(cls, factory, info=info, store=store, kwargs=kwargs)
 
 
-# TODO This is going to be the messy part, support business logic
-def setup(clean_up=False):
+def setup(objects=None, types=None, resolvers=None):
     """Setup and configure your Repository"""
+    if objects is not None:
+        for obj in objects:
+            add(obj)
+
+    if types is not None:
+        for tp in types:
+            if isinstance(tp, DependencyInfo):
+                register(info=tp)
+            else:
+                register(cls=tp)
+    if resolvers is not None:
+        for resolver in resolvers:
+            add_resolver(resolver)
 
 
 def add_resolver(resolver: "Resolver"):
-    _repository.get(_LayeredRepository).add_resolver(resolver)
-
-
-def remove(obj):
-    ...
+    current_repo().add_resolver(resolver)
 
 
 def current_repo():
-    return _repository.get(_LayeredRepository)
+    return _repository.get(LayeredRepository)
 
 
 def context():
     """return a context manager that adds a repository to the stack and yields it"""
-    repo = _repository.get(_LayeredRepository)
+    repo = current_repo()
     resolvers = repo.resolvers.copy()
-    return repo.push(_SimpleRepository(resolvers))
+    return repo.push(SimpleRepository(resolvers))
 
 
 def pop_context():
     """pops the current repository from the repository stack, effectively resetting the state of
-    the repository to"""
-    return _repository.get(_LayeredRepository).pop()
+    the repository to a previous state"""
+    repo = current_repo()
+    return repo.pop()
 
 
 EMPTY = object()
-DependencyInfo = namedtuple("DependencyInfo", ["cls", "factory", "kwargs"], defaults=(None,))
+DependencyInfo = namedtuple(
+    "DependencyInfo", ["cls", "factory", "store", "kwargs"], defaults=(True, None,)
+)
 TypeHintInfo = namedtuple("TypeHintInfo", ["collection", "inner_type"])
 
 
@@ -82,50 +95,6 @@ class PartiallyResolved(RuntimeError):
 
 class CircularDependency(RuntimeError):
     pass
-
-
-class Resolver:
-    def create(
-        self, factory: Callable[..., T], repository: "_LayeredRepository", kwargs: dict = None
-    ) -> T:
-        kwargs = kwargs or {}
-        deps = self.get_dependencies(factory, repository, kwargs)
-        deps.update(kwargs)
-        return factory(**deps)
-
-    def get_dependencies(
-        self, factory: Callable[..., T], repository: "_LayeredRepository", kwargs: dict = None
-    ) -> Dict[str, Any]:
-        raise CannotResolve()
-
-
-class TypeHintingResolver(Resolver):
-    def get_dependencies(
-        self, factory: Callable[..., T], repository: "_LayeredRepository", kwargs: dict = None
-    ) -> Dict[str, Any]:
-        kwargs = kwargs or {}
-        try:
-            signature = inspect.signature(factory)
-        except ValueError:  # some builtin types
-            raise CannotResolve
-
-        dependencies = {}
-        for key, param in signature.parameters.items():
-            if key in kwargs or param.default is not inspect.Parameter.empty:
-                continue
-            annotation = param.annotation
-            if annotation is inspect.Parameter.empty:
-                raise CannotResolve(key)
-            if hasattr(annotation, "__origin__"):
-                info = parse_collection_from_type_hint(annotation)
-                if info:
-                    dependencies[key] = info.collection(repository.get(info.inner_type, many=True))
-                    continue
-                else:
-                    raise CannotResolve(key, param.annotation)
-            dependencies[key] = repository.get(param.annotation)
-        return dependencies
-
 
 
 class _ContextManagedStack(list):
@@ -145,8 +114,7 @@ class _LookupStack(_ContextManagedStack):
         return " -> ".join(getattr(i, "__name__", str(i)) for i in self)
 
 
-# TODO: Layer repositories in contexts
-class _SimpleRepository:
+class SimpleRepository:
     def __init__(self, resolvers: Iterable["Resolver"]):
 
         self.resolvers: List["Resolver"] = list(resolvers)
@@ -155,7 +123,7 @@ class _SimpleRepository:
         self.instances: Dict[Type[T], List[T]] = {}
         self.lookup_stack = _LookupStack()
 
-    def get(self, key: Union[Type[T], str], many=False) -> Union[List[T], T]:
+    def get(self, key: Union[Type[T], str], many=False, repo=None) -> Union[List[T], T]:
         if isinstance(key, str):
             key = self.types_by_str.get(key)
         if key is None:
@@ -165,12 +133,13 @@ class _SimpleRepository:
             return self.instances.get(key, [])
 
         if key not in self.instances:
-            self.create(key)
+            self.create(key, repo=repo)
 
         instances = self.instances[key]
         return instances[-1]
 
-    def create(self, key: Type[T]) -> T:
+    def create(self, key: Type[T], repo=None) -> T:
+        repo = repo or self
         if not isinstance(key, type):
             raise TypeError(f"Can only create classes, not {key}")
         if key in self.lookup_stack:
@@ -180,8 +149,8 @@ class _SimpleRepository:
         with self.lookup_stack.push(key):
             for plugin in self.resolvers:
                 try:
-                    inst = plugin.create(info.factory, self, info.kwargs)
-                except CannotResolve:
+                    inst = plugin.create(info.factory, repo, info.kwargs)
+                except (CannotResolve, PartiallyResolved):
                     continue
                 break
             if inst is EMPTY:
@@ -209,26 +178,39 @@ class _SimpleRepository:
             for base in cls.__mro__[1:]:
                 append_instance_to(base)
 
-    def register(self, cls: Type[T], factory: Callable = None, kwargs=None):
-        if not isinstance(cls, type):
-            raise TypeError(f"Can only register classes, not {cls}")
-        if factory is None:
-            factory = cls
-        for base in cls.__mro__:
+    def register(
+        self,
+        cls: Type[T] = None,
+        factory: Callable = None,
+        info: DependencyInfo = None,
+        store=True,
+        kwargs=None,
+    ):
+        if not (bool(cls) ^ bool(info)):
+            raise ValueError("Supply either cls or info")
+
+        if info is None:
+            if not isinstance(cls, type):
+                raise TypeError(f"Can only register classes, not {cls}")
+            if factory is None:
+                factory = cls
+            info = DependencyInfo(cls=cls, factory=factory, store=store, kwargs=kwargs)
+
+        for base in info.cls.__mro__:
             if base not in self.types:
                 key = base.__name__
                 self.types_by_str[key] = base
-                self.types[base] = DependencyInfo(cls=cls, factory=factory, kwargs=kwargs)
+                self.types[base] = info
 
-    def add_resolver(self, resolver: Resolver):
+    def add_resolver(self, resolver: "Resolver"):
         self.resolvers.insert(0, resolver)
 
     def __contains__(self, item: Type):
         return item in self.instances
 
 
-class _LayeredRepository(_ContextManagedStack):
-    def __init__(self, first_layer: _SimpleRepository):
+class LayeredRepository(_ContextManagedStack):
+    def __init__(self, first_layer: SimpleRepository):
         super().__init__([first_layer])
 
     def current(self):
@@ -242,17 +224,106 @@ class _LayeredRepository(_ContextManagedStack):
 
         for repo in reversed(self):
             try:
-                return repo.get(key, many)
+                return repo.get(key, many, repo=self)
             except CannotResolve as e:
                 err = e
         if err:
             raise err
+
+    def create(self, key: Type[T]) -> T:
+        return self.current().create(key, repo=self)
+
+    def pop(self):
+        if len(self) <= 1:
+            raise IndexError("Cannot pop the base repository layer")
+        return super().pop()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            self.pop()
+        except IndexError:
+            pass
 
     def __getattr__(self, item):
         return getattr(self.current(), item)
 
     def __contains__(self, item: Type):
         return any(item in repo for repo in self)
+
+
+class Resolver:
+    def create(
+        self, factory: Callable[..., T], repository: LayeredRepository, kwargs: dict = None
+    ) -> T:
+        kwargs = kwargs or {}
+        deps = self.get_dependencies(factory, repository, kwargs)
+        deps.update(kwargs)
+        return factory(**deps)
+
+    def get_dependencies(
+        self, factory: Callable[..., T], repository: LayeredRepository, kwargs: dict = None
+    ) -> Dict[str, Any]:
+        """Override this to """
+        raise CannotResolve()
+
+
+class TypeHintingResolver(Resolver):
+    def get_dependencies(
+        self, factory: Callable[..., T], repository: LayeredRepository, kwargs: dict = None
+    ) -> Dict[str, Any]:
+        kwargs = kwargs or {}
+        try:
+            signature = inspect.signature(factory)
+        except ValueError:  # some builtin types
+            raise CannotResolve()
+
+        dependencies = {}
+        for key, param in signature.parameters.items():
+            if key in kwargs or param.default is not inspect.Parameter.empty:
+                continue
+            annotation = param.annotation
+            if annotation is inspect.Parameter.empty:
+                raise CannotResolve(key)
+            if hasattr(annotation, "__origin__"):
+                info = parse_collection_from_type_hint(annotation)
+                if info:
+                    dependencies[key] = info.collection(repository.get(info.inner_type, many=True))
+                    continue
+                else:
+                    raise CannotResolve(key, param.annotation)
+            dependencies[key] = repository.get(param.annotation)
+        return dependencies
+
+
+class Attribute:
+    name: str
+
+    def __init__(self, cls_or_name, lazy=True):
+        self.dependency = cls_or_name
+        self.lazy = lazy
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+
+        obj = instance.__dict__.get(self.name, EMPTY)
+        if obj is EMPTY:
+            obj = current_repo().get(self.dependency)
+            instance.__dict__[self.name] = obj
+        return obj
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+
+class AttributeResolver(Resolver):
+    def get_dependencies(
+        self, factory: Callable[..., T], repository: LayeredRepository, kwargs: dict = None
+    ) -> Dict[str, Any]:
+        for attr in vars(factory).values():
+            if isinstance(attr, Attribute) and not attr.lazy:
+                repository.get(attr.dependency)
+        raise PartiallyResolved()
 
 
 def is_generic_type_hint(hint):
@@ -282,7 +353,7 @@ def parse_collection_from_type_hint(hint) -> Optional[TypeHintInfo]:
         # Must be variable length tuple
         if len(hint.__args__) != 2 or hint.__args__[1] != Ellipsis:
             return None
-    elif len(hint.__args__) != 1:
+    elif len(hint.__args__) != 1:  # just to be sure
         return None
     if collection in vars(collections.abc).values():
         collection = list
@@ -296,7 +367,7 @@ def parse_collection_from_type_hint(hint) -> Optional[TypeHintInfo]:
     return TypeHintInfo(collection, inner_type)
 
 
-_repository = _SimpleRepository(resolvers=[TypeHintingResolver()])
+_repository = SimpleRepository(resolvers=[TypeHintingResolver()])
 _repository.add(TypeHintingResolver())
 
 # Some aliases for professional (ie. boring) people

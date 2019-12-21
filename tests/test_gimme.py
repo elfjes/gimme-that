@@ -81,22 +81,32 @@ def test_base_plugin_cant_resolve():
 
 class TestRepositorySetup:
     def test_global_repo_contains_instance_of_one(self):
-        assert gimme._LayeredRepository in gimme._repository
+        assert gimme.LayeredRepository in gimme._repository
 
     def test_default_repository_has_default_resolvers(self):
-        default_repo = gimme._repository.get(gimme._LayeredRepository)
+        default_repo = gimme._repository.get(gimme.LayeredRepository)
 
         resolver_types = [type(res) for res in default_repo.resolvers]
         assert resolver_types == [gimme.TypeHintingResolver]
 
-    def test_can_add_resolvers(self):
-        default_repo = gimme.current_repo()
-        curr_len = len(default_repo.resolvers)
+    def test_can_add_resolvers(self, repo):
+        curr_len = len(repo.resolvers)
         obj = object()
-        default_repo.add_resolver(obj)
-        assert default_repo.resolvers[0] is obj
-        assert len(default_repo.resolvers) == 1 + curr_len
-        default_repo.resolvers.remove(obj)
+        repo.add_resolver(obj)
+        assert repo.resolvers[0] is obj
+        assert len(repo.resolvers) == 1 + curr_len
+
+    def test_global_setup(self, repo):
+        objs = list(), 15
+        types = str, gimme.DependencyInfo(dict, dict)
+        resolver = object()
+        gimme.setup(objects=objs, types=types, resolvers=[resolver])
+
+        assert repo.resolvers[0] == resolver
+        for tp in str, dict:
+            assert tp in repo.types
+        for tp in list, int:
+            assert tp in repo.instances
 
 
 class TestRepository:
@@ -118,8 +128,8 @@ class TestRepository:
 
     def test_can_add_and_retrieve_object(self, repo):
         obj = object()
-        repo.add(obj)
-        assert repo.get(object) is obj
+        gimme.add(obj)
+        assert gimme.that(object) is obj
 
     def test_deep_add_object(self, repo):
         obj = self.MyList()
@@ -129,6 +139,7 @@ class TestRepository:
     def test_shallow_add_object(self, repo):
         class MyList(list):
             ...
+
         obj = MyList()
         repo.add(obj, deep=False)
         assert MyList in repo
@@ -169,7 +180,7 @@ class TestRepository:
         assert repo.types[SimpleClass] == gimme.DependencyInfo(SimpleClass, SimpleClass)
 
     def test_can_register_with_alternative_factory(self, repo, dependency_info):
-        repo.register(dependency_info.cls, dependency_info.factory, dependency_info.kwargs)
+        repo.register(info=dependency_info)
         assert repo.types[object] == dependency_info
 
     def test_create_calls_plugin_with_factory_and_kwargs(self, repo, dependency_info):
@@ -195,7 +206,7 @@ class TestRepository:
             )
 
     def test_raises_when_no_plugin_can_resolve_dependency(self, repo, failing_plugin):
-        repo = gimme._SimpleRepository([failing_plugin, failing_plugin])
+        repo = gimme.SimpleRepository([failing_plugin, failing_plugin])
         with pytest.raises(gimme.CannotResolve) as e:
             repo.get(object)
         assert str(e.value) == "object"
@@ -249,6 +260,52 @@ class TestContext:
         repo.add(2)
         assert repo.get(int, many=True) == [1, 2]
 
+    def test_manual_pushing_and_popping_contexts(self):
+        gimme.add(2)
+        gimme.context()
+
+        gimme.add(1)
+        assert gimme.that(int) == 1
+        gimme.pop_context()
+
+        assert gimme.that(int) == 2
+
+    def test_resolve_from_multiple_layers(self):
+        class MyClass:
+            def __init__(self, a: int, b: str):
+                self.a = a
+                self.b = b
+
+        gimme.add(2)
+        with gimme.context():
+            gimme.add("bla")
+            obj = gimme.that(MyClass)
+        assert (obj.a, obj.b) == (2, "bla")
+
+
+class TestExceptions:
+    def test_can_only_create_types(self, repo):
+        with pytest.raises(TypeError):
+            repo.create("invalid")
+
+    def test_cannot_supply_both_cls_and_info_on_registration(self, repo):
+        with pytest.raises(ValueError):
+            repo.register(cls=int, info=gimme.DependencyInfo(int, int))
+
+    def test_must_supply_either_cls_or_info_on_registration(self, repo):
+        with pytest.raises(ValueError):
+            repo.register()
+
+    def test_cls_must_be_type_on_registration(self, repo):
+        with pytest.raises(TypeError):
+            repo.register(cls="invalid")
+
+    def test_cannot_pop_base_layer(self, repo):
+        repo.pop()
+        with pytest.raises(IndexError):
+            repo.pop()
+
+
 
 def test_circular_dependencies(repo):
     class A:
@@ -259,15 +316,31 @@ def test_circular_dependencies(repo):
         def __init__(self, a: A):
             ...
 
-    @repo.register
+    @gimme.dependency
     class C:
         def __init__(self, b: B):
             ...
 
-    repo.add_resolver(gimme.TypeHintingResolver())
     with pytest.raises(gimme.CircularDependency) as err:
-        repo.get(A)
+        gimme.that(A)
     assert str(err.value) == "A -> C -> B"
+
+
+def test_can_resolve_circular_dependencies_using_deferred_resolution():
+    class A:
+        b = gimme.later("B")
+
+        def __init__(self):
+            ...
+
+    @gimme.dependency
+    class B:
+        def __init__(self, a: A):
+            self.a = a
+
+    obj = gimme.that(A)
+    assert isinstance(obj, A)
+    assert isinstance(obj.b, B)
 
 
 def test_lookup_stack_is_cleared_after_successful_get(repo):
@@ -275,7 +348,7 @@ def test_lookup_stack_is_cleared_after_successful_get(repo):
     assert not repo.lookup_stack
 
 
-def test_lookup_stack_is_cleared_after_unsucessful_get(repo):
+def test_lookup_stack_is_cleared_after_unsuccessful_get(repo):
     with pytest.raises(gimme.CannotResolve):
         repo.get("Invalid")
     assert not repo.lookup_stack
@@ -293,6 +366,7 @@ def test_lookup_stack_is_cleared_after_unsucessful_get(repo):
         (List[List[int]], None),
         (Tuple[int, ...], tuple),
         (Tuple[int, int], None),
+        (Tuple[int], None),
         (list, None),
         (NamedTuple("Tuple", [("field", int)]), None),
     ],
