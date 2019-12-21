@@ -1,5 +1,4 @@
 import dataclasses
-from dataclasses import dataclass
 from typing import List, Sequence, Iterable, Set, Dict, Tuple, NamedTuple
 from unittest import mock
 from unittest.mock import Mock, call
@@ -44,9 +43,10 @@ class MyAttr:
     b: list = attr.ib(factory=list)
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def repo():
-    return gimme._Repository(plugins=[gimme.DefaultResolver()])
+    with gimme.context() as repo:
+        yield repo
 
 
 def test_can_get_class_without_dependencies():
@@ -81,10 +81,10 @@ def test_base_plugin_cant_resolve():
 
 class TestRepositorySetup:
     def test_global_repo_contains_instance_of_one(self):
-        assert gimme._Repository in gimme._repository
+        assert gimme._LayeredRepository in gimme._repository
 
     def test_default_repository_has_default_resolvers(self):
-        default_repo = gimme._repository.get(gimme._Repository)
+        default_repo = gimme._repository.get(gimme._LayeredRepository)
 
         resolver_types = [type(res) for res in default_repo.resolvers]
         assert resolver_types == [gimme.TypeHintingResolver]
@@ -127,15 +127,20 @@ class TestRepository:
         assert repo.get(object) is repo.get(list) is repo.get(self.MyList) is obj
 
     def test_shallow_add_object(self, repo):
-        obj = list()
+        class MyList(list):
+            ...
+        obj = MyList()
         repo.add(obj, deep=False)
-        assert list in repo
-        assert object not in repo
+        assert MyList in repo
+        assert list not in repo
 
     def test_adding_object_registers_type(self, repo):
-        with mock.patch.object(repo, "register") as register:
-            repo.add(object())
-        assert register.call_args == call(object)
+        class NewType:
+            ...
+
+        with mock.patch.object(repo.current(), "register") as register:
+            repo.add(NewType())
+        assert register.call_args == call(NewType)
 
     def test_registering_adds_definitions_for_all_parents(self, repo):
         MyList = self.MyList
@@ -160,8 +165,8 @@ class TestRepository:
             repo.get("unknown")
 
     def test_info_is_added_on_first_lookup(self, repo):
-        repo.create(object)
-        assert repo.types == {object: gimme.DependencyInfo(object, object)}
+        repo.create(SimpleClass)
+        assert repo.types[SimpleClass] == gimme.DependencyInfo(SimpleClass, SimpleClass)
 
     def test_can_register_with_alternative_factory(self, repo, dependency_info):
         repo.register(dependency_info.cls, dependency_info.factory, dependency_info.kwargs)
@@ -169,29 +174,31 @@ class TestRepository:
 
     def test_create_calls_plugin_with_factory_and_kwargs(self, repo, dependency_info):
         plugin = Mock()
-        repo.resolvers = [plugin]
-        repo.types[object] = dependency_info
-        repo.create(object)
+        layer = repo.current()
+        layer.resolvers = [plugin]
+        layer.types[object] = dependency_info
+        layer.create(object)
         assert plugin.create.call_args == call(
-            dependency_info.factory, repo, dependency_info.kwargs
+            dependency_info.factory, layer, dependency_info.kwargs
         )
 
     def test_create_moves_to_next_plugin_on_CannotResolve(
         self, repo, dependency_info, failing_plugin
     ):
-        repo.resolvers = [failing_plugin, Mock()]
-        repo.types[object] = dependency_info
-        repo.create(object)
+        layer = repo.current()
+        layer.resolvers = [failing_plugin, Mock()]
+        layer.types[object] = dependency_info
+        layer.create(object)
         for plugin in repo.resolvers:
             assert plugin.create.call_args == call(
-                dependency_info.factory, repo, dependency_info.kwargs
+                dependency_info.factory, layer, dependency_info.kwargs
             )
 
     def test_raises_when_no_plugin_can_resolve_dependency(self, repo, failing_plugin):
-        repo.resolvers = [failing_plugin, failing_plugin]
+        repo = gimme._SimpleRepository([failing_plugin, failing_plugin])
         with pytest.raises(gimme.CannotResolve) as e:
             repo.get(object)
-        assert str(e.value) == str(object)
+        assert str(e.value) == "object"
 
 
 class TestWhenMultipleHaveBeenRegistered:
@@ -229,6 +236,20 @@ class TestWhenMultipleHaveBeenRegistered:
             assert isinstance(inst, cls)
 
 
+class TestContext:
+    def test_can_context_dependent_dependency(self):
+        gimme.add(2)
+        with gimme.context():
+            gimme.add(1)
+            assert gimme.that(int) == 1
+        assert gimme.that(int) == 2
+
+    def test_can_get_many(self, repo):
+        repo.add(1)
+        repo.add(2)
+        assert repo.get(int, many=True) == [1, 2]
+
+
 def test_circular_dependencies(repo):
     class A:
         def __init__(self, c: "C"):
@@ -244,7 +265,7 @@ def test_circular_dependencies(repo):
             ...
 
     repo.add_resolver(gimme.TypeHintingResolver())
-    with pytest.raises(gimme.CircularDependeny) as err:
+    with pytest.raises(gimme.CircularDependency) as err:
         repo.get(A)
     assert str(err.value) == "A -> C -> B"
 

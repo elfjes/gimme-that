@@ -1,27 +1,28 @@
 import collections
 import inspect
 from collections import namedtuple
+from itertools import chain
 from typing import Type, Union, TypeVar, Iterable, List, Dict, Callable, Any, Optional, ForwardRef
 
 T = TypeVar("T")
 
 
 def add(obj, deep=True):
-    return _repository.get(_Repository).add(obj, deep=deep)
+    return _repository.get(_LayeredRepository).add(obj, deep=deep)
 
 
 def that(cls_or_str: Union[Type[T], str]) -> T:
-    return _repository.get(_Repository).get(cls_or_str)
+    return _repository.get(_LayeredRepository).get(cls_or_str)
 
 
-def later(cls_or_str):
-    """For use with descriptor based injection, lazy evaluation of dependency"""
+def later(cls_or_str, *, lazy=True):
+    """For use with descriptor based injection, allows for lazy evaluation of dependency"""
     ...
 
 
 def dependency(cls: Type[T]) -> Type[T]:
     """Either use as a decorator to register a class, or use during configuration"""
-    _repository.get(_Repository).register(cls)
+    _repository.get(_LayeredRepository).register(cls)
     return cls
 
 
@@ -42,7 +43,7 @@ def setup(clean_up=False):
 
 
 def add_resolver(resolver: "Resolver"):
-    _repository.get(_Repository).add_resolver(resolver)
+    _repository.get(_LayeredRepository).add_resolver(resolver)
 
 
 def remove(obj):
@@ -50,7 +51,20 @@ def remove(obj):
 
 
 def current_repo():
-    return _repository.get(_Repository)
+    return _repository.get(_LayeredRepository)
+
+
+def context():
+    """return a context manager that adds a repository to the stack and yields it"""
+    repo = _repository.get(_LayeredRepository)
+    resolvers = repo.resolvers.copy()
+    return repo.push(_SimpleRepository(resolvers))
+
+
+def pop_context():
+    """pops the current repository from the repository stack, effectively resetting the state of
+    the repository to"""
+    return _repository.get(_LayeredRepository).pop()
 
 
 EMPTY = object()
@@ -58,21 +72,21 @@ DependencyInfo = namedtuple("DependencyInfo", ["cls", "factory", "kwargs"], defa
 TypeHintInfo = namedtuple("TypeHintInfo", ["collection", "inner_type"])
 
 
-class CannotResolve(Exception):
+class CannotResolve(TypeError):
     pass
 
 
-class PartiallyResolved(Exception):
+class PartiallyResolved(RuntimeError):
     pass
 
 
-class CircularDependeny(Exception):
+class CircularDependency(RuntimeError):
     pass
 
 
 class Resolver:
     def create(
-        self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
+        self, factory: Callable[..., T], repository: "_LayeredRepository", kwargs: dict = None
     ) -> T:
         kwargs = kwargs or {}
         deps = self.get_dependencies(factory, repository, kwargs)
@@ -80,18 +94,20 @@ class Resolver:
         return factory(**deps)
 
     def get_dependencies(
-        self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
+        self, factory: Callable[..., T], repository: "_LayeredRepository", kwargs: dict = None
     ) -> Dict[str, Any]:
         raise CannotResolve()
 
 
 class TypeHintingResolver(Resolver):
     def get_dependencies(
-        self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
+        self, factory: Callable[..., T], repository: "_LayeredRepository", kwargs: dict = None
     ) -> Dict[str, Any]:
         kwargs = kwargs or {}
-
-        signature = inspect.signature(factory)
+        try:
+            signature = inspect.signature(factory)
+        except ValueError:  # some builtin types
+            raise CannotResolve
 
         dependencies = {}
         for key, param in signature.parameters.items():
@@ -111,14 +127,8 @@ class TypeHintingResolver(Resolver):
         return dependencies
 
 
-class DefaultResolver(Resolver):
-    def get_dependencies(
-        self, factory: Callable[..., T], repository: "_Repository", kwargs: dict = None
-    ) -> Dict[str, Any]:
-        return {}
 
-
-class _LookupStack(list):
+class _ContextManagedStack(list):
     def push(self, item):
         self.append(item)
         return self
@@ -129,15 +139,17 @@ class _LookupStack(list):
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.pop()
 
-    def __str__(self):
 
+class _LookupStack(_ContextManagedStack):
+    def __str__(self):
         return " -> ".join(getattr(i, "__name__", str(i)) for i in self)
 
-# TODO: Layer repositories in contexts
-class _Repository:
-    def __init__(self, plugins: Iterable["Resolver"]):
 
-        self.resolvers: List["Resolver"] = list(plugins)
+# TODO: Layer repositories in contexts
+class _SimpleRepository:
+    def __init__(self, resolvers: Iterable["Resolver"]):
+
+        self.resolvers: List["Resolver"] = list(resolvers)
         self.types_by_str: Dict[str, Type[T]] = {}
         self.types: Dict[Type, DependencyInfo] = {}
         self.instances: Dict[Type[T], List[T]] = {}
@@ -149,20 +161,20 @@ class _Repository:
         if key is None:
             raise CannotResolve(f"Could not resolve for key {key}")
 
+        if many:
+            return self.instances.get(key, [])
+
         if key not in self.instances:
             self.create(key)
 
         instances = self.instances[key]
-        if many:
-            return instances
-        else:
-            return instances[-1]
+        return instances[-1]
 
     def create(self, key: Type[T]) -> T:
         if not isinstance(key, type):
             raise TypeError(f"Can only create classes, not {key}")
         if key in self.lookup_stack:
-            raise CircularDependeny(str(self.lookup_stack))
+            raise CircularDependency(str(self.lookup_stack))
         info = self._ensure_info(key)
         inst = EMPTY
         with self.lookup_stack.push(key):
@@ -173,7 +185,7 @@ class _Repository:
                     continue
                 break
             if inst is EMPTY:
-                raise CannotResolve(self.lookup_stack)
+                raise CannotResolve(str(self.lookup_stack))
             self.add(inst)
             return inst
 
@@ -215,6 +227,34 @@ class _Repository:
         return item in self.instances
 
 
+class _LayeredRepository(_ContextManagedStack):
+    def __init__(self, first_layer: _SimpleRepository):
+        super().__init__([first_layer])
+
+    def current(self):
+        return self[-1]
+
+    def get(self, key: Union[Type[T], str], many=False) -> Union[List[T], T]:
+        err = None
+
+        if many:
+            return list(chain.from_iterable(repo.get(key, many) for repo in self))
+
+        for repo in reversed(self):
+            try:
+                return repo.get(key, many)
+            except CannotResolve as e:
+                err = e
+        if err:
+            raise err
+
+    def __getattr__(self, item):
+        return getattr(self.current(), item)
+
+    def __contains__(self, item: Type):
+        return any(item in repo for repo in self)
+
+
 def is_generic_type_hint(hint):
     return hasattr(hint, "__origin__")
 
@@ -250,13 +290,13 @@ def parse_collection_from_type_hint(hint) -> Optional[TypeHintInfo]:
     inner_type = hint.__args__[0]
     if isinstance(inner_type, ForwardRef):
         inner_type = inner_type.__forward_arg__
-    if not isinstance(inner_type, (str, type)):
+    elif not isinstance(inner_type, (str, type)):
         return None
 
     return TypeHintInfo(collection, inner_type)
 
 
-_repository = _Repository(plugins=[TypeHintingResolver(), DefaultResolver()])
+_repository = _SimpleRepository(resolvers=[TypeHintingResolver()])
 _repository.add(TypeHintingResolver())
 
 # Some aliases for professional (ie. boring) people
