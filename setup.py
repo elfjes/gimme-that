@@ -29,7 +29,6 @@ setup(
     author="Pelle Koster",
     url="https://github.com/efljes/gimme-that",
     license="MIT",
-    py_modules=["src/gimme"],
     packages=find_packages("src"),
     package_dir={"": "src"},
     python_requires=">=3.7",
@@ -37,6 +36,7 @@ setup(
     test_suite="tests",
     version=get_version(),
     classifiers=[
+        "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
@@ -44,5 +44,6 @@ setup(
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3 :: Only",
+        "Topic :: Software Development :: Libraries",
     ],
 )
