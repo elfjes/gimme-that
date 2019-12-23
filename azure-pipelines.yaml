@@ -1,0 +1,13 @@
+resources:
+  repositories:
+    - repository: elfjes
+      type: github
+      endpoint: github
+      name: elfjes/azure-pipeline-templates
+      ref: refs/heads/master
+
+jobs:
+- template: job--python-tox.yml@elfjes
+  parameters:
+    toxenvs: [pre-commit, py37, py38]
+    os: linux
