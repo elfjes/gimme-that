@@ -1,4 +1,5 @@
 .. image:: https://dev.azure.com/pellekoster/gimme-that/_apis/build/status/elfjes.gimme-that?branchName=master
+  :target: https://dev.azure.com/pellekoster/gimme-that/_build?definitionId=1
   :alt: Azure Pipelines
 
 Gimme That
