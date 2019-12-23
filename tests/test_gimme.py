@@ -27,22 +27,6 @@ class HasDependency:
         self.dep = dep
 
 
-@attr.dataclass
-class MyAttr:
-    dep: Dependency
-    no_init: int = attr.ib(init=False)
-    a: int = 4
-    b: list = attr.ib(factory=list)
-
-
-@dataclasses.dataclass
-class MyAttr:
-    dep: Dependency
-    no_init: int = dataclasses.field(init=False)
-    a: int = 4
-    b: list = attr.ib(factory=list)
-
-
 @pytest.fixture(autouse=True)
 def repo():
     with gimme.context() as repo:
@@ -64,12 +48,26 @@ def test_can_get_class_with_requirement():
 
 
 def test_can_get_attrs_class():
+    @attr.dataclass
+    class MyAttr:
+        dep: Dependency
+        no_init: int = attr.ib(init=False)
+        a: int = 4
+        b: list = attr.ib(factory=list)
+
     inst = gimme.that(MyAttr)
     assert isinstance(inst.dep, Dependency)
 
 
 def test_can_get_dataclass():
-    inst = gimme.that(MyAttr)
+    @dataclasses.dataclass
+    class MyDataclass:
+        dep: Dependency
+        no_init: int = dataclasses.field(init=False)
+        a: int = 4
+        b: list = attr.ib(factory=list)
+
+    inst = gimme.that(MyDataclass)
     assert isinstance(inst.dep, Dependency)
 
 
@@ -211,9 +209,10 @@ class TestRepository:
             repo.get(object)
         assert str(e.value) == "object"
 
-    def test_gets_multiple_instances_when_not_storing(self,repo):
+    def test_gets_multiple_instances_when_not_storing(self, repo):
         repo.register(SimpleClass, store=False)
         assert repo.get(SimpleClass) is not repo.get(SimpleClass)
+
 
 class TestWhenMultipleHaveBeenRegistered:
     def test_can_get_multiple_when_multiple_have_been_added(self, repo):
@@ -307,7 +306,6 @@ class TestExceptions:
         repo.pop()
         with pytest.raises(IndexError):
             repo.pop()
-
 
 
 def test_circular_dependencies(repo):

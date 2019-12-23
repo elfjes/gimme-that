@@ -83,14 +83,16 @@ def test_get_dependencies_with_generic_type(plugin, repo):
     assert plugin.get_dependencies(function, repo) == {"a": (1, 2)}
     assert repo.get.call_args_list == [call(int, many=True)]
 
+
 def test_cannot_resolve_invalid_type_hint(plugin, repo):
     def function(a: Tuple[int, int]):
         pass
+
     with pytest.raises(CannotResolve):
         plugin.get_dependencies(function, repo)
+
 
 @pytest.mark.parametrize("tp", [int, str, dict])
 def test_raise_cannot_resolve_on_unresolvable_builtin_types(plugin, repo, tp):
     with pytest.raises(CannotResolve):
         plugin.get_dependencies(tp, repo)
-
