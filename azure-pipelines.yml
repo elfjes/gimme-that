@@ -1,3 +1,9 @@
+trigger:
+  branches:
+    include: [master, test-me-*]
+  tags:
+    include: ['*']
+
 resources:
   repositories:
     - repository: elfjes
@@ -11,3 +17,4 @@ jobs:
   parameters:
     toxenvs: [pre-commit, py37, py38]
     os: linux
+    coverage: false
