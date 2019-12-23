@@ -1,3 +1,9 @@
+trigger:
+  branches:
+    include: [master, test-me-*]
+  tags:
+    include: ['*']
+
 resources:
   repositories:
     - repository: elfjes
