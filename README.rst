@@ -1,3 +1,6 @@
+.. image:: https://dev.azure.com/pellekoster/gimme-that/_apis/build/status/elfjes.gimme-that?branchName=master
+  :alt: Azure Pipelines
+
 Gimme That
 ===========
 A lightweight, simple but extensible dependency injection framework
