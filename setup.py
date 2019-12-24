@@ -17,8 +17,10 @@ def get_version() -> str:
         return file.readline()
 
 
-EXTRAS_REQUIRE = {"test": ["pytest"]}
-EXTRAS_REQUIRE["dev"] = EXTRAS_REQUIRE["test"] + ["pre-commit", "flake8>=3.7.9", "tox"]
+EXTRAS_REQUIRE = {"test": ["pytest"], "docs": ["sphinx"]}
+EXTRAS_REQUIRE["dev"] = (
+    EXTRAS_REQUIRE["test"] + EXTRAS_REQUIRE["docs"] + ["pre-commit", "flake8>=3.7.9", "tox"]
+)
 
 setup(
     name="gimme-that",
