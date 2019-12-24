@@ -12,12 +12,18 @@ def that(cls_or_str: Union[Type[T], str]) -> T:
     return current_repo().get(cls_or_str)
 
 
-def later(cls_or_str, *, lazy=True):
-    """For use with descriptor based injection, allows for lazy evaluation of dependency"""
+def later(cls_or_str: Union[type, str], lazy=True) -> "Attribute":
+    """For use with descriptor based injection, allows for lazy evaluation of a dependency"""
     return Attribute(cls_or_str, lazy=lazy)
 
 
 def add(obj, deep=True):
+    """add an object to the Repository
+
+    :param obj: the object to add
+    :param deep: wheteher
+    :return:
+    """
     return current_repo().add(obj, deep=deep)
 
 
@@ -80,7 +86,7 @@ def pop_context():
 
 EMPTY = object()
 DependencyInfo = namedtuple(
-    "DependencyInfo", ["cls", "factory", "store", "kwargs"], defaults=(True, None,)
+    "DependencyInfo", ["cls", "factory", "store", "kwargs"], defaults=(True, None)
 )
 TypeHintInfo = namedtuple("TypeHintInfo", ["collection", "inner_type"])
 
@@ -97,7 +103,7 @@ class CircularDependency(RuntimeError):
     pass
 
 
-class _ContextManagedStack(list):
+class _Stack(list):
     def push(self, item):
         self.append(item)
         return self
@@ -109,7 +115,7 @@ class _ContextManagedStack(list):
         self.pop()
 
 
-class _LookupStack(_ContextManagedStack):
+class _LookupStack(_Stack):
     def __str__(self):
         return " -> ".join(getattr(i, "__name__", str(i)) for i in self)
 
@@ -211,7 +217,7 @@ class SimpleRepository:
         return item in self.instances
 
 
-class LayeredRepository(_ContextManagedStack):
+class LayeredRepository(_Stack):
     def __init__(self, first_layer: SimpleRepository):
         super().__init__([first_layer])
 
@@ -253,6 +259,27 @@ class LayeredRepository(_ContextManagedStack):
         return any(item in repo for repo in self)
 
 
+class Attribute:
+    name: str
+
+    def __init__(self, cls_or_name, lazy=True):
+        self.dependency = cls_or_name
+        self.lazy = lazy
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+
+        obj = instance.__dict__.get(self.name, EMPTY)
+        if obj is EMPTY:
+            obj = current_repo().get(self.dependency)
+            instance.__dict__[self.name] = obj
+        return obj
+
+    def __set_name__(self, owner, name):
+        self.name = name
+
+
 class Resolver:
     def create(
         self, factory: Callable[..., T], repository: LayeredRepository, kwargs: dict = None
@@ -287,7 +314,7 @@ class TypeHintingResolver(Resolver):
             if annotation is inspect.Parameter.empty:
                 raise CannotResolve(key)
             if hasattr(annotation, "__origin__"):
-                info = parse_collection_from_type_hint(annotation)
+                info = parse_type_hint(annotation)
                 if info:
                     dependencies[key] = info.collection(repository.get(info.inner_type, many=True))
                     continue
@@ -295,27 +322,6 @@ class TypeHintingResolver(Resolver):
                     raise CannotResolve(key, param.annotation)
             dependencies[key] = repository.get(param.annotation)
         return dependencies
-
-
-class Attribute:
-    name: str
-
-    def __init__(self, cls_or_name, lazy=True):
-        self.dependency = cls_or_name
-        self.lazy = lazy
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-
-        obj = instance.__dict__.get(self.name, EMPTY)
-        if obj is EMPTY:
-            obj = current_repo().get(self.dependency)
-            instance.__dict__[self.name] = obj
-        return obj
-
-    def __set_name__(self, owner, name):
-        self.name = name
 
 
 class AttributeResolver(Resolver):
@@ -332,7 +338,7 @@ def is_generic_type_hint(hint):
     return hasattr(hint, "__origin__")
 
 
-def parse_collection_from_type_hint(hint) -> Optional[TypeHintInfo]:
+def parse_type_hint(hint) -> Optional[TypeHintInfo]:
     """
     Get the constructor for iterable/sequence type hints:
     returns the concrete type belonging to the type hint, ie `set` for `typing.Set`
