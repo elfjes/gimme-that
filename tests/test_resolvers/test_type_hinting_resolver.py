@@ -4,7 +4,8 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from gimme import TypeHintingResolver, CannotResolve
+from gimme.exceptions import CannotResolve
+from gimme.resolvers import TypeHintingResolver
 
 
 @pytest.fixture

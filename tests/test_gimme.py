@@ -7,6 +7,11 @@ import attr
 import pytest
 
 import gimme
+import gimme.exceptions
+import gimme.helpers
+import gimme.repository
+import gimme.resolvers
+import gimme.types
 
 
 class SimpleClass:
@@ -72,17 +77,17 @@ def test_can_get_dataclass():
 
 
 def test_base_plugin_cant_resolve():
-    plugin = gimme.Resolver()
-    with pytest.raises(gimme.CannotResolve):
+    plugin = gimme.resolvers.Resolver()
+    with pytest.raises(gimme.exceptions.CannotResolve):
         plugin.create(object, Mock())
 
 
 class TestRepositorySetup:
     def test_global_repo_contains_instance_of_one(self):
-        assert gimme.LayeredRepository in gimme._repository
+        assert gimme.LayeredRepository in gimme.main._repository
 
     def test_default_repository_has_default_resolvers(self):
-        default_repo = gimme._repository.get(gimme.LayeredRepository)
+        default_repo = gimme.main._repository.get(gimme.LayeredRepository)
 
         resolver_types = [type(res) for res in default_repo.resolvers]
         assert resolver_types == [gimme.TypeHintingResolver]
@@ -96,7 +101,7 @@ class TestRepositorySetup:
 
     def test_global_setup(self, repo):
         objs = list(), 15
-        types = str, gimme.DependencyInfo(dict, dict)
+        types = str, gimme.types.DependencyInfo(dict, dict)
         resolver = object()
         gimme.setup(objects=objs, types=types, resolvers=[resolver])
 
@@ -116,12 +121,12 @@ class TestRepository:
         def factory(a):
             return a
 
-        return gimme.DependencyInfo(object, factory, {"a": 1})
+        return gimme.types.DependencyInfo(object, factory, {"a": 1})
 
     @pytest.fixture
     def failing_plugin(self):
         out = Mock()
-        out.create.side_effect = gimme.CannotResolve
+        out.create.side_effect = gimme.exceptions.CannotResolve
         return out
 
     def test_can_add_and_retrieve_object(self, repo):
@@ -160,7 +165,7 @@ class TestRepository:
             "list": list,
             "object": object,
         }
-        info = gimme.DependencyInfo(MyList, MyList)
+        info = gimme.types.DependencyInfo(MyList, MyList)
         assert repo.types == {MyList: info, list: info, object: info}
 
     def test_can_lookup_obj_by_string(self, repo):
@@ -170,12 +175,12 @@ class TestRepository:
         assert repo.get("object") is obj
 
     def test_raises_on_unknown_class_string(self, repo):
-        with pytest.raises(gimme.CannotResolve):
+        with pytest.raises(gimme.exceptions.CannotResolve):
             repo.get("unknown")
 
     def test_info_is_added_on_first_lookup(self, repo):
         repo.create(SimpleClass)
-        assert repo.types[SimpleClass] == gimme.DependencyInfo(SimpleClass, SimpleClass)
+        assert repo.types[SimpleClass] == gimme.types.DependencyInfo(SimpleClass, SimpleClass)
 
     def test_can_register_with_alternative_factory(self, repo, dependency_info):
         repo.register(info=dependency_info)
@@ -204,8 +209,8 @@ class TestRepository:
             )
 
     def test_raises_when_no_plugin_can_resolve_dependency(self, repo, failing_plugin):
-        repo = gimme.SimpleRepository([failing_plugin, failing_plugin])
-        with pytest.raises(gimme.CannotResolve) as e:
+        repo = gimme.repository.SimpleRepository([failing_plugin, failing_plugin])
+        with pytest.raises(gimme.exceptions.CannotResolve) as e:
             repo.get(object)
         assert str(e.value) == "object"
 
@@ -292,7 +297,7 @@ class TestExceptions:
 
     def test_cannot_supply_both_cls_and_info_on_registration(self, repo):
         with pytest.raises(ValueError):
-            repo.register(cls=int, info=gimme.DependencyInfo(int, int))
+            repo.register(cls=int, info=gimme.types.DependencyInfo(int, int))
 
     def test_must_supply_either_cls_or_info_on_registration(self, repo):
         with pytest.raises(ValueError):
@@ -322,7 +327,7 @@ def test_circular_dependencies(repo):
         def __init__(self, b: B):
             ...
 
-    with pytest.raises(gimme.CircularDependency) as err:
+    with pytest.raises(gimme.exceptions.CircularDependency) as err:
         gimme.that(A)
     assert str(err.value) == "A -> C -> B"
 
@@ -350,7 +355,7 @@ def test_lookup_stack_is_cleared_after_successful_get(repo):
 
 
 def test_lookup_stack_is_cleared_after_unsuccessful_get(repo):
-    with pytest.raises(gimme.CannotResolve):
+    with pytest.raises(gimme.exceptions.CannotResolve):
         repo.get("Invalid")
     assert not repo.lookup_stack
 
@@ -373,7 +378,7 @@ def test_lookup_stack_is_cleared_after_unsuccessful_get(repo):
     ],
 )
 def test_can_parse_collection(hint, expected):
-    result = gimme.parse_type_hint(hint)
+    result = gimme.helpers.parse_type_hint(hint)
     if expected is not None:
         result = result.collection
 
