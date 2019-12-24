@@ -373,7 +373,7 @@ def test_lookup_stack_is_cleared_after_unsuccessful_get(repo):
     ],
 )
 def test_can_parse_collection(hint, expected):
-    result = gimme.parse_collection_from_type_hint(hint)
+    result = gimme.parse_type_hint(hint)
     if expected is not None:
         result = result.collection
 
