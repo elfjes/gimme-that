@@ -1,9 +1,9 @@
 from itertools import chain
 from typing import Iterable, List, Dict, Type, Union, Callable, TYPE_CHECKING
 
-from .types import T, DependencyInfo
 from .exceptions import CannotResolve, CircularDependency, PartiallyResolved
 from .helpers import _Stack, _LookupStack, EMPTY
+from .types import T, DependencyInfo
 
 if TYPE_CHECKING:
     from .resolvers import Resolver
@@ -146,3 +146,25 @@ class LayeredRepository(_Stack):
 
     def __contains__(self, item: Type):
         return any(item in repo for repo in self)
+
+
+class Attribute:
+    name: str
+
+    def __init__(self, cls_or_name, repo: "LayeredRepository", lazy=True):
+        self.dependency = cls_or_name
+        self.lazy = lazy
+        self.repo = repo
+
+    def __get__(self, instance, owner):
+        if instance is None:
+            return self
+
+        obj = instance.__dict__.get(self.name, EMPTY)
+        if obj is EMPTY:
+            obj = self.repo.get(self.dependency)
+            instance.__dict__[self.name] = obj
+        return obj
+
+    def __set_name__(self, owner, name):
+        self.name = name

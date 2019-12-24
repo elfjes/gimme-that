@@ -1,4 +1,3 @@
-from .attribute import Attribute
 from .main import (
     add,
     add_resolver,
@@ -18,7 +17,6 @@ from .resolvers import AttributeResolver, TypeHintingResolver
 
 
 __all__ = [
-    "Attribute",
     "add",
     "add_resolver",
     "attribute",

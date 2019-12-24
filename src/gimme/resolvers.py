@@ -1,10 +1,10 @@
 import inspect
 from typing import Callable, Dict, Any, TYPE_CHECKING
 
-from gimme.attribute import Attribute
 from gimme.helpers import parse_type_hint
 from gimme.types import T
 from gimme.exceptions import CannotResolve, PartiallyResolved
+from gimme.repository import Attribute
 
 if TYPE_CHECKING:
     from gimme.repository import LayeredRepository
