@@ -1,7 +1,6 @@
 from typing import Union, Type, TYPE_CHECKING
 
-from gimme.attribute import Attribute
-from gimme.repository import LayeredRepository, SimpleRepository
+from gimme.repository import LayeredRepository, SimpleRepository, Attribute
 from gimme.resolvers import TypeHintingResolver
 from gimme.types import DependencyInfo, T
 
@@ -23,7 +22,7 @@ def add(obj, deep=True):
     """add an object to the Repository
 
     :param obj: the object to add
-    :param deep: wheteher
+    :param deep: whether to also register `obj` for all base classes of `obj`
     :return:
     """
     return current_repo().add(obj, deep=deep)

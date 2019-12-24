@@ -2,7 +2,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-import gimme
+from gimme.repository import Attribute
 from gimme.exceptions import PartiallyResolved
 import gimme.resolvers
 
@@ -19,7 +19,7 @@ def repo():
 
 def test_can_resolve_attributes(resolver, repo):
     class MyClass:
-        dep = gimme.Attribute(int, lazy=False, repo=repo)
+        dep = Attribute(int, lazy=False, repo=repo)
 
     with pytest.raises(PartiallyResolved):
         resolver.get_dependencies(MyClass, repo)
@@ -29,7 +29,7 @@ def test_can_resolve_attributes(resolver, repo):
 
 def test_lazy_default_doesnt_resolve_immediately(resolver, repo):
     class MyClass:
-        dep = gimme.Attribute(int, repo=repo)
+        dep = Attribute(int, repo=repo)
 
     with pytest.raises(PartiallyResolved):
         resolver.get_dependencies(MyClass, repo)

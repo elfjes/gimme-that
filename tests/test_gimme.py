@@ -160,11 +160,7 @@ class TestRepository:
         MyList = self.MyList
         repo.register(MyList)
 
-        assert repo.types_by_str == {
-            "MyList": MyList,
-            "list": list,
-            "object": object,
-        }
+        assert repo.types_by_str == {"MyList": MyList, "list": list, "object": object}
         info = gimme.types.DependencyInfo(MyList, MyList)
         assert repo.types == {MyList: info, list: info, object: info}
 
