@@ -8,7 +8,7 @@ A lightweight, simple but extensible dependency injection framework
 
 Getting started
 ----------------
-Install from `PyPI <https://www.pypi.org>`_
+Install from `PyPI <https://pypi.org/project/gimme-that>`_
 
 .. code-block::
 
