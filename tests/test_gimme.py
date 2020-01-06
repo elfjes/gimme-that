@@ -1,4 +1,4 @@
-import dataclasses
+import sys
 from typing import List, Sequence, Iterable, Set, Dict, Tuple, NamedTuple
 from unittest import mock
 from unittest.mock import Mock, call
@@ -64,7 +64,10 @@ def test_can_get_attrs_class():
     assert isinstance(inst.dep, Dependency)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 7), reason="no dataclasses in py3.6")
 def test_can_get_dataclass():
+    import dataclasses
+
     @dataclasses.dataclass
     class MyDataclass:
         dep: Dependency
