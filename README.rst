@@ -8,7 +8,7 @@ A lightweight, simple but extensible dependency injection framework
 
 Getting started
 ----------------
-Install from `PyPI <www.pypi.org>`_
+Install from `PyPI <https://www.pypi.org>`_
 
 .. code-block::
 
