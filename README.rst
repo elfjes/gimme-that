@@ -2,6 +2,10 @@
   :target: https://dev.azure.com/pellekoster/gimme-that/_build?definitionId=2&branchFilter=2
   :alt: Azure Pipelines
 
+.. image:: https://readthedocs.org/projects/gimme-that/badge/?version=latest
+  :target: https://gimme-that.readthedocs.io/en/latest/
+  :alt: Read the Docs
+
 Gimme That
 ===========
 A lightweight, simple but extensible dependency injection framework
