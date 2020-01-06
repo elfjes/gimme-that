@@ -2,13 +2,18 @@
   :target: https://dev.azure.com/pellekoster/gimme-that/_build?definitionId=2&branchFilter=2
   :alt: Azure Pipelines
 
+.. image:: https://readthedocs.org/projects/gimme-that/badge/?version=latest
+  :target: https://gimme-that.readthedocs.io/en/latest/
+  :alt: Read the Docs
+
 Gimme That
 ===========
-A lightweight, simple but extensible dependency injection framework
+A lightweight, simple but extensible dependency injection framework. Read the full documentation
+`here <https://gimme-that.readthedocs.io>`_
 
 Getting started
 ----------------
-Install from `PyPI <www.pypi.org>`_
+Install from `PyPI <https://pypi.org/project/gimme-that>`_
 
 .. code-block::
 

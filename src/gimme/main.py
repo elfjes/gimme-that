@@ -78,7 +78,7 @@ def register(
     :class:`~gimme.types.DependencyInfo` object directly that contains the configuration.
 
     :param cls: The class to register in the repository.
-    :param factory: Optional factory to create an instance, if not specified, use  class`
+    :param factory: Optional factory to create an instance, if not specified, use the class'
         constructor instead (ie. ``cls.__init__``)
     :param info: An object that contains the class instantiation configuration. Only provide this
         when no ``cls`` parameter is given
