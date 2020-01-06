@@ -1,18 +1,24 @@
 import inspect
-from typing import Callable, Dict, Any, TYPE_CHECKING
+from typing import Callable, Dict, Any
 
-from gimme.helpers import parse_type_hint
-from gimme.types import T
+import gimme.repository
 from gimme.exceptions import CannotResolve, PartiallyResolved
+from gimme.helpers import parse_type_hint
 from gimme.repository import Attribute
-
-if TYPE_CHECKING:
-    from gimme.repository import LayeredRepository
+from gimme.types import T
 
 
 class Resolver:
+    """Base class for creating extensions to the dependency resolution system. Subclass this class
+    and add instances of your class to the repository using :func:`gimme.add_resolver` or
+    :func:`gimme.setup`
+    """
+
     def create(
-        self, factory: Callable[..., T], repository: "LayeredRepository", kwargs: dict = None
+        self,
+        factory: Callable,
+        repository: gimme.repository.LayeredRepository,
+        kwargs: dict = None,
     ) -> T:
         kwargs = kwargs or {}
         deps = self.get_dependencies(factory, repository, kwargs)
@@ -20,15 +26,37 @@ class Resolver:
         return factory(**deps)
 
     def get_dependencies(
-        self, factory: Callable[..., T], repository: "LayeredRepository", kwargs: dict = None
+        self,
+        factory: Callable,
+        repository: gimme.repository.LayeredRepository,
+        kwargs: dict = None,
     ) -> Dict[str, Any]:
-        """Override this to """
+        """Override this to customize how to resolve the dependencies of a specific class /
+        factory function. This method will be called with the following arguments:
+
+        :param factory: The class / factory function to determine the dependencies for
+        :param repository: The current ``Repository`` can be used for requesting dependencies
+        :param kwargs: Any user specified keyword arguments (see :func:`gimme.register`). These
+            will have preference over any keyword arguments this function supplies
+
+        Your ``Resolver`` may do one of three things:
+
+        * Return a dictionary of keyword arguments to supply to the factory upon instantiation
+        * Raise :exc:`~gimme.exceptions.CannotResolve` if your ``Resolver`` cannot return an
+        instantiated object and the next ``Resolver`` should be tried
+        * Raise :exc:`~gimme.exceptions.PartiallyResolved` if your ``Resolver`` did resolve some,
+        but not all of the dependencies
+
+        """
         raise CannotResolve()
 
 
 class TypeHintingResolver(Resolver):
     def get_dependencies(
-        self, factory: Callable[..., T], repository: "LayeredRepository", kwargs: dict = None
+        self,
+        factory: Callable,
+        repository: gimme.repository.LayeredRepository,
+        kwargs: dict = None,
     ) -> Dict[str, Any]:
         kwargs = kwargs or {}
         try:
@@ -56,7 +84,10 @@ class TypeHintingResolver(Resolver):
 
 class AttributeResolver(Resolver):
     def get_dependencies(
-        self, factory: Callable[..., T], repository: "LayeredRepository", kwargs: dict = None
+        self,
+        factory: Callable,
+        repository: gimme.repository.LayeredRepository,
+        kwargs: dict = None,
     ) -> Dict[str, Any]:
         for attr in vars(factory).values():
             if isinstance(attr, Attribute) and not attr.lazy:

@@ -16,7 +16,15 @@ API reference
 Main API
 ########
 .. automodule:: gimme
-   :members: add, attribute, context, dependency, get, later, pop_context,register, setup, that
+   :members: add, add_resolver, context, dependency, later, pop_context,register, setup, that
+
+.. function:: get(cls_or_str)
+
+   An alias for :func:`gimme.that`. Use this if you do not like the default *cute* names
+
+.. function:: attribute(cls_or_str)
+
+   An alias for :func:`gimme.later`. Use this if you do not like the default *cute* names
 
 gimme.repository
 ################

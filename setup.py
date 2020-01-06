@@ -17,7 +17,7 @@ def get_version() -> str:
         return file.readline()
 
 
-EXTRAS_REQUIRE = {"test": ["pytest"], "docs": ["sphinx"]}
+EXTRAS_REQUIRE = {"test": ["pytest"], "docs": ["sphinx", "sphinx-autodoc-typehints"]}
 EXTRAS_REQUIRE["dev"] = (
     EXTRAS_REQUIRE["test"] + EXTRAS_REQUIRE["docs"] + ["pre-commit", "flake8>=3.7.9", "tox"]
 )
