@@ -15,7 +15,7 @@ resources:
 jobs:
 - template: job--python-tox.yml@elfjes
   parameters:
-    toxenvs: [pre-commit, py37, py38]
+    toxenvs: [pre-commit, py36, py37, py38]
     os: linux
     coverage: false
 

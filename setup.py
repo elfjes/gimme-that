@@ -31,7 +31,7 @@ setup(
     license="MIT",
     packages=find_packages("src"),
     package_dir={"": "src"},
-    python_requires=">=3.7",
+    python_requires=">=3.6",
     extras_require=EXTRAS_REQUIRE,
     test_suite="tests",
     version=get_version(),
