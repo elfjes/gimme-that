@@ -8,7 +8,8 @@
 
 Gimme That
 ===========
-A lightweight, simple but extensible dependency injection framework
+A lightweight, simple but extensible dependency injection framework. Read the full documentation
+`here <https://gimme-that.readthedocs.io>`_
 
 Getting started
 ----------------
