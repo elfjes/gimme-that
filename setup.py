@@ -17,9 +17,14 @@ def get_version() -> str:
         return file.readline()
 
 
-EXTRAS_REQUIRE = {"test": ["pytest"], "docs": ["sphinx", "sphinx-autodoc-typehints"]}
+EXTRAS_REQUIRE = {
+    "test": ["pytest==5.3.2"],
+    "docs": ["sphinx==2.3.1", "sphinx-autodoc-typehints==1.10.3"],
+}
 EXTRAS_REQUIRE["dev"] = (
-    EXTRAS_REQUIRE["test"] + EXTRAS_REQUIRE["docs"] + ["pre-commit", "flake8>=3.7.9", "tox"]
+    EXTRAS_REQUIRE["test"]
+    + EXTRAS_REQUIRE["docs"]
+    + ["pre-commit==1.21.0", "flake8==3.7.9", "tox==3.14.3"]
 )
 
 setup(
