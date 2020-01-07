@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from setuptools import setup, find_packages
@@ -11,16 +12,34 @@ def get_long_description() -> str:
         return file.read()
 
 
-def get_version() -> str:
-    version = CURRENT_DIR / "VERSION"
-    with open(version) as file:
-        return file.readline()
+def find_version(fname, var_name="__version__") -> str:
+    """Attempts to find the version number in the file names fname.
+    Raises RuntimeError if not found.
+    """
+    version = None
+    regex = re.compile(rf'{var_name} = [\'"]([^\'"]*)[\'"]')
+
+    with open(fname, "r") as file:
+        for line in file:
+            match = regex.match(line)
+            if match:
+                version = match.group(1)
+                break
+    if not version:
+        raise RuntimeError("Cannot find version information.")
+    return version
 
 
-EXTRAS_REQUIRE = {"test": ["pytest"], "docs": ["sphinx", "sphinx-autodoc-typehints"]}
+EXTRAS_REQUIRE = {
+    "test": ["pytest==5.3.2"],
+    "docs": ["sphinx==2.3.1", "sphinx-autodoc-typehints==1.10.3"],
+}
 EXTRAS_REQUIRE["dev"] = (
-    EXTRAS_REQUIRE["test"] + EXTRAS_REQUIRE["docs"] + ["pre-commit", "flake8>=3.7.9", "tox"]
+    EXTRAS_REQUIRE["test"]
+    + EXTRAS_REQUIRE["docs"]
+    + ["pre-commit==1.21.0", "flake8==3.7.9", "tox==3.14.3"]
 )
+
 
 setup(
     name="gimme-that",
@@ -36,7 +55,7 @@ setup(
     python_requires=">=3.6",
     extras_require=EXTRAS_REQUIRE,
     test_suite="tests",
-    version=get_version(),
+    version=find_version("src/gimme/__init__.py"),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

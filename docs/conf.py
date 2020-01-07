@@ -13,8 +13,8 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath("../../src"))
-
+sys.path.insert(0, os.path.abspath("../src"))
+import gimme  # noqa: E402
 
 # -- Project information -----------------------------------------------------
 
@@ -23,7 +23,7 @@ copyright = "2019, Pelle Koster"
 author = "Pelle Koster"
 
 # The full version, including alpha/beta/rc tags
-release = "0.1.1"
+release = gimme.__version__
 
 
 # -- General configuration ---------------------------------------------------

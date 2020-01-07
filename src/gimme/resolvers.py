@@ -43,10 +43,9 @@ class Resolver:
 
         * Return a dictionary of keyword arguments to supply to the factory upon instantiation
         * Raise :exc:`~gimme.exceptions.CannotResolve` if your ``Resolver`` cannot return an
-        instantiated object and the next ``Resolver`` should be tried
+          instantiated object and the next ``Resolver`` should be tried
         * Raise :exc:`~gimme.exceptions.PartiallyResolved` if your ``Resolver`` did resolve some,
-        but not all of the dependencies
-
+          but not all of the dependencies
         """
         raise CannotResolve()
 
