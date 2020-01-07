@@ -22,7 +22,7 @@ jobs:
   parameters:
     toxenvs: [pre-commit, py36, py37, py38]
     os: linux
-    coverage: false
+    coverage: true
 
 - template: job--pypi-release.yml@elfjes
   parameters:
