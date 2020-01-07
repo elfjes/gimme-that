@@ -13,7 +13,7 @@ resources:
       ref: refs/heads/elfjes
 
 jobs:
-- template: job--python-tox.yml@elfjes
+- template: job--python-tox.yml@cov
   parameters:
     toxenvs: [pre-commit, py36, py37, py38]
     os: linux

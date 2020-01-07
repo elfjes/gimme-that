@@ -31,7 +31,7 @@ def find_version(fname, var_name="__version__") -> str:
 
 
 EXTRAS_REQUIRE = {
-    "test": ["pytest==5.3.2"],
+    "test": ["pytest==5.3.2", "pytest-cov==2.8.1"],
     "docs": ["sphinx==2.3.1", "sphinx-autodoc-typehints==1.10.3"],
 }
 EXTRAS_REQUIRE["dev"] = (
