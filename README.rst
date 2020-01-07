@@ -2,6 +2,9 @@
   :target: https://dev.azure.com/pellekoster/gimme-that/_build?definitionId=2&branchFilter=2
   :alt: Azure Pipelines
 
+.. image:: https://codecov.io/gh/elfjes/gimme-that/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/elfjes/gimme-that
+
 .. image:: https://readthedocs.org/projects/gimme-that/badge/?version=latest
   :target: https://gimme-that.readthedocs.io/en/latest/
   :alt: Read the Docs
