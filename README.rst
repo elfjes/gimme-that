@@ -58,7 +58,7 @@ Features
 * Scoped repositories to manage the lifetime of created objects (useful for testing)
 * Does not require any decorators or other additions to your classes (most of the time). They remain `your` classes
 * Detects circular dependencies, and provides the means to resolve them
-* Extensibility using plugins: create your own logic for resolving dependencies and creating classes
+* Extensibility using plugins: create your own logic for resolving dependencies and instantiating classes
 
 Development
 ------------
