@@ -2,6 +2,14 @@
   :target: https://dev.azure.com/pellekoster/gimme-that/_build?definitionId=2&branchFilter=2
   :alt: Azure Pipelines
 
+.. image:: https://badge.fury.io/py/gimme-that.svg
+  :target: https://pypi.org/project/gimme-that
+  :alt: PyPI - Package version
+
+.. image:: https://img.shields.io/pypi/pyversions/gimme-that
+  :target: https://pypi.org/project/gimme-that
+  :alt: PyPI - Python Version
+
 .. image:: https://codecov.io/gh/elfjes/gimme-that/branch/master/graph/badge.svg
   :target: https://codecov.io/gh/elfjes/gimme-that
 

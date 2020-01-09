@@ -15,7 +15,7 @@ from .main import (
 from .repository import LayeredRepository, SimpleRepository
 from .resolvers import AttributeResolver, TypeHintingResolver
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "add",
