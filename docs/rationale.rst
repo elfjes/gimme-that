@@ -95,7 +95,8 @@ separate factory function. And this could get quite messy. Also, we're still tig
 our factory functions. During our tests we still need to mock them out for all classes that use
 the helpers. We can make it a bit more generic and create an entity that we can ask for
 objects of any type, and it should give us an instance of whatever we ask for. Congratulations, we
-have now developed a Service Locator. A very simple implementation is given below:
+have now developed a Service Locator, or Inversion of Control (IoC) container. A very simple
+implementation is given below:
 
 .. code-block:: python
 
@@ -135,5 +136,20 @@ our ``Client`` class, we provide it to the class when we instantiate it:
 The class is now loosely coupled to its dependency and has no coupling to our service locator or
 factory functions. This is arguably the cleanest way of implementing dependency injection. It does
 however, create a new problem. How and where are we going to instantiate our ``Client`` class? We
-can no longer just type ``Client`` and be done with it. We need to know about its dependencies. One
-way we can solve this
+can no longer just type ``Client()`` and be done with it. We need to know about its dependencies.
+One way we can solve this is to re-implement a helper/factory function.
+
+.. code-block:: python
+
+    def get_client():
+        connection = service_locator[DBConnection]
+        return Client(connection)
+
+This doesn't look like a huge improvement over what we had before. But like the transition we made
+from the previous factory function to a Service Locator, we can make it more generic. What if we
+create an entity that can determine a class's dependency, resolve these dependencies (and the
+dependencies of dependencies recursively), and finally gives us an instance of our class back. We
+can configure this entity with a couple of predefined dependencies to differentiate between testing
+and production and give it logic to determine for itself what specific implementations of
+dependencies to use. Such an entity is called a Dependency Injection Framework.
+
