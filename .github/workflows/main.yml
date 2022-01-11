@@ -3,7 +3,7 @@ name: Main Workflow
 on: [push]
 
 jobs:
-  test:
+  unittests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
