@@ -1,12 +1,12 @@
 name: Publish
 
 on: [push]
+# if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
 
 jobs:
   publish:
     needs: [pre-commit-checks, unittests]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
     steps:
       - uses: actions/checkout@master
       - name: Set up Python 3.10
