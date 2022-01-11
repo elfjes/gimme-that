@@ -3,7 +3,7 @@ name: Main Workflow
 on: [push]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -22,6 +22,7 @@ jobs:
         run: tox -e py
 
   publish:
+    needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
     steps:
