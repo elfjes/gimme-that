@@ -1,7 +1,7 @@
 name: Python package
 
 on: [push]
-if: startsWith(github.ref, 'refs/tags')
+# if: startsWith(github.ref, 'refs/tags')
 
 jobs:
   publish:
