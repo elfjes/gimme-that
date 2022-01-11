@@ -1,19 +1,19 @@
 import collections
-from typing import Optional
+import typing as t
 
 try:
     from typing import ForwardRef
 except ImportError:
     from typing import _ForwardRef as ForwardRef
 
-from .types import TypeHintInfo
+from .types import TypeHintInfo, T
 
 
 def is_generic_type_hint(hint):
     return hasattr(hint, "__origin__")
 
 
-def parse_type_hint(hint) -> Optional[TypeHintInfo]:
+def parse_type_hint(hint) -> t.Optional[TypeHintInfo]:
     """
     Get the constructor for iterable/sequence type hints:
     returns the concrete type belonging to the type hint, ie `set` for `typing.Set`
@@ -51,7 +51,7 @@ def parse_type_hint(hint) -> Optional[TypeHintInfo]:
     return TypeHintInfo(collection_type, inner_type)
 
 
-class _Stack(list):
+class _Stack(list, t.List[T]):
     def push(self, item):
         self.append(item)
         return self
