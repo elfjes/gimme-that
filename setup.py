@@ -31,13 +31,13 @@ def find_version(fname, var_name="__version__") -> str:
 
 
 EXTRAS_REQUIRE = {
-    "test": ["pytest==5.3.2", "pytest-cov==2.8.1"],
-    "docs": ["sphinx==2.3.1", "sphinx-autodoc-typehints==1.10.3"],
+    "test": ["pytest==6.2.5", "pytest-cov==3.0.0"],
+    "docs": ["sphinx==4.3.2", "sphinx-autodoc-typehints==1.15.2"],
 }
 EXTRAS_REQUIRE["dev"] = (
     EXTRAS_REQUIRE["test"]
     + EXTRAS_REQUIRE["docs"]
-    + ["pre-commit==1.21.0", "flake8==3.7.9", "tox==3.14.3"]
+    + ["pre-commit==2.16.0", "flake8==4.0.1", "tox==3.24.5"]
 )
 
 
@@ -62,9 +62,10 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python",
-        "Programming Language :: Python :: 3.6",
         "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3 :: Only",
         "Topic :: Software Development :: Libraries",
     ],

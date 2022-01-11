@@ -15,13 +15,13 @@ resources:
 jobs:
 - template: job--python-tox.yml@elfjes
   parameters:
-    toxenvs: [pre-commit, py36, py37, py38]
+    toxenvs: [pre-commit, py36, py37, py38, py39, py310]
     os: linux
     coverage: true
 
 - template: job--pypi-release.yml@elfjes
   parameters:
-    python: "3.8"
+    python: "3.10"
     distributions: "sdist bdist_wheel"
     externalFeed: pypi-gimme-that
     dependsOn:
