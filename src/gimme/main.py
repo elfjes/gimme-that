@@ -5,21 +5,29 @@ from gimme.resolvers import Resolver, TypeHintingResolver
 from gimme.types import DependencyInfo, T
 
 
-def that(cls_or_str: Union[Type[T], str]) -> T:
+def that(kind: Union[Type[T], str, callable], **kwargs) -> T:
     """Request an object from the :class:`Repository <gimme.repository.LayeredRepository>` by type.
     If it does not exist in the :class:`Repository <gimme.repository.LayeredRepository>` yet,
     it will be created, and any dependencies of the class will be resolved recursively. If the
     class has been registered with a specific factory function, that function will be used to
     create the object.
 
+    Alternatively, a callable, such as function, may be given as the kind. In this case,
+    ``gimme.that`` tries to resolve all input parameters of the function, runs the function with
+    the input parameters and returns the result. In this case the result is never stored in the
+    :class:`Repository <gimme.repository.LayeredRepository>`. However, any dependencies that are
+    created when resolving the input parameters, may be stored.
+
     Optionally, if the class has been registered using the :func:`gimme.dependency` decorator or
     :func:`gimme.register` function, the object type may also be specified using class name as a
     string.
 
-    :param cls_or_str: The type of which to retrieve an object
+    :param kind: either a class, identified by the type-object itself or a string, or a
+        ``callable``
+
     :rtype: ~T
     """
-    return current_repo().get(cls_or_str)
+    return current_repo().get(kind, kwargs=kwargs or None)
 
 
 def later(cls_or_str: Union[type, str], lazy: bool = True) -> "Attribute":

@@ -1,17 +1,16 @@
-import sys
-from typing import List, Sequence, Iterable, Set, Dict, Tuple, NamedTuple
+from typing import Dict, Iterable, List, NamedTuple, Sequence, Set, Tuple
 from unittest import mock
 from unittest.mock import Mock, call
+import sys
 
 import attr
-import pytest
-
 import gimme
 import gimme.exceptions
 import gimme.helpers
 import gimme.repository
 import gimme.resolvers
 import gimme.types
+import pytest
 
 
 class SimpleClass:
@@ -50,6 +49,10 @@ def test_can_get_class_with_requirement():
     inst = gimme.that(HasDependency)
     assert isinstance(inst, HasDependency)
     assert isinstance(inst.dep, Dependency)
+
+
+def test_stores_by_default():
+    assert gimme.get(HasDependency) is gimme.get(HasDependency)
 
 
 def test_can_get_attrs_class():
@@ -115,6 +118,74 @@ class TestRepositorySetup:
             assert tp in repo.instances
 
 
+class TestSupplyKwargsOnGet:
+    @pytest.fixture
+    def cls(self):
+        class MyClass:
+            def __init__(self, dep: Dependency, other_dep: Dependency) -> None:
+                self.dep = dep
+                self.other_dep = other_dep
+
+        return MyClass
+
+    def test_can_supply_kwargs_on_get(self, cls):
+        other_dep = object()
+        inst = gimme.that(cls, other_dep=other_dep)
+        assert isinstance(inst.dep, Dependency)
+        assert inst.other_dep is other_dep
+
+    def test_always_creates_new_object_when_supplying_kwargs(self, cls):
+        other_dep = object()
+        assert gimme.that(cls) is not gimme.that(cls, other_dep=other_dep)
+
+    def test_doesnt_store_object_when_supplying_kwargs(
+        self, cls, repo: gimme.repository.SimpleRepository
+    ):
+        other_dep = object()
+        gimme.that(cls, other_dep=other_dep)
+        assert cls not in repo
+
+
+class TestResolveFunction:
+    def test_resolve_type_annotated_factory_function(self):
+        def factory(a: Dependency):
+            return dict(a=a)
+
+        result = gimme.that(factory)
+        assert isinstance(result["a"], Dependency)
+
+    def test_pretty_error_on_failure(self):
+        def failing(invalid):
+            pass
+
+        with pytest.raises(gimme.exceptions.CannotResolve) as exc:
+            gimme.that(failing)
+        assert str(exc.value) == "failing"
+
+    def test_doenst_store_result(self, repo):
+        def factory():
+            return 42
+
+        gimme.that(factory)
+        assert not repo.instances
+
+    def test_stores_dependenies(self, repo):
+        def factory(a: Dependency):
+            return 42
+
+        assert Dependency not in repo
+
+        gimme.that(factory)
+        assert Dependency in repo
+
+    def test_takes_kwargs(self):
+        def factory(a):
+            return dict(a=a)
+
+        result = gimme.that(factory, a=42)
+        assert result["a"] == 42
+
+
 class TestRepository:
     class MyList(list):
         ...
@@ -155,7 +226,7 @@ class TestRepository:
         class NewType:
             ...
 
-        with mock.patch.object(repo.current(), "register") as register:
+        with mock.patch.object(repo.current, "register") as register:
             repo.add(NewType())
         assert register.call_args == call(NewType)
 
@@ -187,7 +258,7 @@ class TestRepository:
 
     def test_create_calls_plugin_with_factory_and_kwargs(self, repo, dependency_info):
         plugin = Mock()
-        layer = repo.current()
+        layer = repo.current
         layer.resolvers = [plugin]
         layer.types[object] = dependency_info
         layer.create(object)
@@ -198,7 +269,7 @@ class TestRepository:
     def test_create_moves_to_next_plugin_on_CannotResolve(
         self, repo, dependency_info, failing_plugin
     ):
-        layer = repo.current()
+        layer = repo.current
         layer.resolvers = [failing_plugin, Mock()]
         layer.types[object] = dependency_info
         layer.create(object)

@@ -18,7 +18,9 @@ class SimpleRepository:
         self.instances: Dict[Type[T], List[T]] = {}
         self.lookup_stack = _LookupStack()
 
-    def get(self, key: Union[Type[T], str], many=False, repo=None) -> Union[List[T], T]:
+    def get(
+        self, key: Union[Type[T], str], many=False, repo=None, kwargs=None
+    ) -> Union[List[T], T]:
         if isinstance(key, str):
             key = self.types_by_str.get(key)
         if key is None:
@@ -27,33 +29,51 @@ class SimpleRepository:
         if many:
             return self.instances.get(key, [])
 
-        if key not in self.instances:
-            inst = self.create(key, repo=repo)
+        if not isinstance(key, type) and callable(key):
+            name = getattr(key, "__name__", str(key))
+            return self.resolve(name, key, repo=repo, kwargs=kwargs)
+
+        if kwargs is not None or key not in self.instances:
+            inst = self.create(key, repo=repo, kwargs=kwargs)
             return inst
 
         instances = self.instances[key]
         return instances[-1]
 
-    def create(self, key: Type[T], repo=None) -> T:
+    def create(self, key: Type[T], repo=None, kwargs=None) -> T:
+        """Instantiate the object and all its dependencies
+        :param key: The class / factory function to instantiate
+        :param repo: The current ``Repository`` used for requesting dependencies
+        :param kwargs: Any user specified keyword arguments (see :func:`gimme.get`). These
+            will have preference over any keyword arguments this function supplies and any
+            keyword arguments supplied by :func:`gimme.register`
+
+        """
         repo = repo or self
         if not isinstance(key, type):
             raise TypeError(f"Can only create classes, not {key}")
         if key in self.lookup_stack:
             raise CircularDependency(str(self.lookup_stack))
         info = self._ensure_info(key)
+        do_store = kwargs is None and info.store
+        if kwargs is not None:
+            kwargs = {**(info.kwargs or {}), **kwargs}
+        inst = self.resolve(key, info.factory, repo=repo, kwargs=kwargs)
+        if do_store:
+            self.add(inst)
+        return inst
+
+    def resolve(self, key, factory, repo=None, kwargs=None):
+        """"""
         inst = EMPTY
         with self.lookup_stack.push(key):
             for plugin in self.resolvers:
                 try:
-                    inst = plugin.create(info.factory, repo, info.kwargs)
+                    return plugin.create(factory, repo, kwargs)
                 except (CannotResolve, PartiallyResolved):
                     continue
-                break
             if inst is EMPTY:
                 raise CannotResolve(str(self.lookup_stack))
-            if info.store:
-                self.add(inst)
-            return inst
 
     def _ensure_info(self, cls: Type[T]) -> DependencyInfo:
         info = self.types.get(cls)
@@ -106,14 +126,15 @@ class SimpleRepository:
         return item in self.instances
 
 
-class LayeredRepository(_Stack):
+class LayeredRepository(_Stack[SimpleRepository]):
     def __init__(self, first_layer: SimpleRepository):
         super().__init__([first_layer])
 
-    def current(self):
+    @property
+    def current(self) -> SimpleRepository:
         return self[-1]
 
-    def get(self, key: Union[Type[T], str], many=False) -> Union[List[T], T]:
+    def get(self, key: Union[Type[T], str], many=False, kwargs=None) -> Union[List[T], T]:
         err = None
 
         if many:
@@ -121,14 +142,14 @@ class LayeredRepository(_Stack):
 
         for repo in reversed(self):
             try:
-                return repo.get(key, many, repo=self)
+                return repo.get(key, many, repo=self, kwargs=kwargs)
             except CannotResolve as e:
                 err = e
         if err:
             raise err
 
     def create(self, key: Type[T]) -> T:
-        return self.current().create(key, repo=self)
+        return self.current.create(key, repo=self)
 
     def pop(self):
         if len(self) <= 1:
@@ -142,7 +163,7 @@ class LayeredRepository(_Stack):
             pass
 
     def __getattr__(self, item):
-        return getattr(self.current(), item)
+        return getattr(self.current, item)
 
     def __contains__(self, item: Type):
         return any(item in repo for repo in self)
