@@ -32,8 +32,6 @@ def parse_type_hint(hint) -> Optional[TypeHintInfo]:
         return None
 
     collection_type = hint.__origin__
-    if hasattr(collection_type, "__extra__"):  # py36
-        collection_type = collection_type.__extra__
 
     if issubclass(collection_type, tuple):
         # Must be variable length tuple
@@ -44,16 +42,11 @@ def parse_type_hint(hint) -> Optional[TypeHintInfo]:
     if collection_type in vars(collections.abc).values():
         collection_type = list
 
-    inner_type = hint.__args__[0]
+    inner_type = getattr(hint, "__args__", [None])[0]
     if isinstance(inner_type, ForwardRef):
         inner_type = inner_type.__forward_arg__
-    # fmt: off
-    elif (
-        not isinstance(inner_type, (str, type))
-        or is_generic_type_hint(inner_type)  # py3.6
-    ):
+    elif not isinstance(inner_type, (str, type)):
         return None
-    # fmt: on
 
     return TypeHintInfo(collection_type, inner_type)
 

@@ -15,7 +15,7 @@ class PartiallyResolved(RuntimeError):
 
 
 class CircularDependency(RuntimeError):
-    """Raised when a circular dependency is detected and the requested class cannot be instantiated
-    """
+    """Raised when a circular dependency is detected and the requested class cannot be
+    instantiated"""
 
     pass

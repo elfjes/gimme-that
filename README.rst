@@ -1,6 +1,6 @@
-.. image:: https://dev.azure.com/pellekoster/gimme-that/_apis/build/status/elfjes.gimme-that?branchName=master
-  :target: https://dev.azure.com/pellekoster/gimme-that/_build?definitionId=2&branchFilter=2
-  :alt: Azure Pipelines
+.. image:: https://github.com/elfjes/gimme-that/actions/workflows/main.yml/badge.svg?branch=master
+  :target: https://github.com/elfjes/gimme-that/actions/workflows/main.yml
+  :alt: Github Actions
 
 .. image:: https://badge.fury.io/py/gimme-that.svg
   :target: https://pypi.org/project/gimme-that
