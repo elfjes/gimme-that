@@ -195,7 +195,7 @@ class TestRepository:
         def factory(a):
             return a
 
-        return gimme.types.DependencyInfo(object, factory, {"a": 1})
+        return gimme.types.DependencyInfo(object, factory, kwargs={"a": 1})
 
     @pytest.fixture
     def failing_plugin(self):
