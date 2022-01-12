@@ -57,9 +57,9 @@ class SimpleRepository:
             raise CircularDependency(str(self.lookup_stack))
         info = self._ensure_info(key)
         do_store = kwargs is None and info.store
-        if kwargs is not None:
-            kwargs = {**(info.kwargs or {}), **kwargs}
-        inst = self.resolve(info.factory, key=key, repo=repo, kwargs=kwargs)
+        combined_kwargs = {**(info.kwargs or {}), **(kwargs or {})}
+
+        inst = self.resolve(info.factory, key=key, repo=repo, kwargs=combined_kwargs)
         if do_store:
             self.add(inst)
         return inst
