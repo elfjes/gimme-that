@@ -1,11 +1,12 @@
-from typing import Union, Type, Any, Callable, Optional, Iterable
+import typing as t
 
-from gimme.repository import LayeredRepository, SimpleRepository, Attribute
+from gimme.repository import LayeredRepository, SimpleRepository
+from gimme.attribute import Attribute
 from gimme.resolvers import Resolver, TypeHintingResolver
 from gimme.types import DependencyInfo, T
 
 
-def that(kind: Union[Type[T], str, callable], **kwargs) -> T:
+def that(kind: t.Union[t.Type[T], str, callable], **kwargs) -> T:
     """Request an object from the :class:`Repository <gimme.repository.LayeredRepository>` by type.
     If it does not exist in the :class:`Repository <gimme.repository.LayeredRepository>` yet,
     it will be created, and any dependencies of the class will be resolved recursively. If the
@@ -30,7 +31,7 @@ def that(kind: Union[Type[T], str, callable], **kwargs) -> T:
     return current_repo().get(kind, kwargs=kwargs or None)
 
 
-def later(cls_or_str: Union[type, str], lazy: bool = True) -> "Attribute":
+def later(cls_or_str: t.Union[type, str], lazy: bool = True) -> "Attribute":
     """Use this as a descriptor in your class definition when dealing with circular dependencies.
     Normally, having circular dependencies would prevent instantiating these classes.
 
@@ -47,7 +48,7 @@ def later(cls_or_str: Union[type, str], lazy: bool = True) -> "Attribute":
     return Attribute(cls_or_str, repo=current_repo(), lazy=lazy)
 
 
-def add(obj: Any, deep: bool = True):
+def add(obj: t.Any, deep: bool = True):
     """Add an object to the :class:`Repository <gimme.repository.LayeredRepository>` after which
     it will be available for dependent classes when resolving their dependencies.
 
@@ -61,7 +62,7 @@ def add(obj: Any, deep: bool = True):
     return current_repo().add(obj, deep=deep)
 
 
-def dependency(cls: Type[T]) -> Type[T]:
+def dependency(cls: t.Type[T]) -> t.Type[T]:
     """
     .. deprecated:: 0.1.2
         Use :func:`gimme.register` instead.
@@ -72,10 +73,10 @@ def dependency(cls: Type[T]) -> Type[T]:
 
 def register(
     cls: type = None,
-    factory: Optional[Callable] = None,
-    info: Optional[DependencyInfo] = None,
+    factory: t.Optional[t.Callable] = None,
+    info: t.Optional[DependencyInfo] = None,
     store: bool = True,
-    kwargs: Optional[dict] = None,
+    kwargs: t.Optional[dict] = None,
 ):
     """
     Register a class in the :class:`Repository <gimme.repository.LayeredRepository>`. This makes
@@ -100,9 +101,9 @@ def register(
 
 
 def setup(
-    objects: Optional[Iterable[Any]] = None,
-    types: Optional[Iterable[Union[type, DependencyInfo]]] = None,
-    resolvers: Optional[Iterable[Resolver]] = None,
+    objects: t.Optional[t.Iterable[t.Any]] = None,
+    types: t.Optional[t.Iterable[t.Union[type, DependencyInfo]]] = None,
+    resolvers: t.Optional[t.Iterable[Resolver]] = None,
 ):
     """Setup and configure your :class:`Repository <gimme.repository.LayeredRepository>`
 

@@ -2,7 +2,7 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from gimme.repository import Attribute
+from gimme.attribute import Attribute
 from gimme.exceptions import PartiallyResolved
 import gimme.resolvers
 

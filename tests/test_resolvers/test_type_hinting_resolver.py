@@ -15,7 +15,9 @@ def plugin():
 
 @pytest.fixture
 def repo():
-    return Mock()
+    repo = Mock()
+    repo.types_by_str = {}
+    return repo
 
 
 def test_can_create_with_deps_and_kwargs(plugin):

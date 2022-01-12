@@ -1,12 +1,7 @@
 import collections
 import typing as t
 
-try:
-    from typing import ForwardRef
-except ImportError:
-    from typing import _ForwardRef as ForwardRef
-
-from .types import TypeHintInfo, T
+from .types import T, TypeHintInfo
 
 
 def is_generic_type_hint(hint):
@@ -43,7 +38,7 @@ def parse_type_hint(hint) -> t.Optional[TypeHintInfo]:
         collection_type = list
 
     inner_type = getattr(hint, "__args__", [None])[0]
-    if isinstance(inner_type, ForwardRef):
+    if isinstance(inner_type, t.ForwardRef):
         inner_type = inner_type.__forward_arg__
     elif not isinstance(inner_type, (str, type)):
         return None
