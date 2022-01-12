@@ -8,12 +8,13 @@ from .main import (
     get,
     later,
     pop_context,
-    that,
     register,
     setup,
+    that,
 )
 from .repository import LayeredRepository, SimpleRepository
 from .resolvers import AttributeResolver, TypeHintingResolver
+from .types import DependencyInfo
 
 __version__ = "0.2.1"
 
@@ -34,4 +35,5 @@ __all__ = [
     "SimpleRepository",
     "AttributeResolver",
     "TypeHintingResolver",
+    "DependencyInfo",
 ]
