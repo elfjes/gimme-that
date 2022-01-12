@@ -1,11 +1,15 @@
-import inspect
-from typing import Callable, Dict, Any
+from __future__ import annotations
 
-import gimme.repository
+import inspect
+import typing as t
+
+from gimme.attribute import Attribute
 from gimme.exceptions import CannotResolve, PartiallyResolved
 from gimme.helpers import parse_type_hint
-from gimme.repository import Attribute
 from gimme.types import T
+
+if t.TYPE_CHECKING:
+    from gimme.repository import LayeredRepository
 
 
 class Resolver:
@@ -16,8 +20,8 @@ class Resolver:
 
     def create(
         self,
-        factory: Callable,
-        repository: gimme.repository.LayeredRepository,
+        factory: t.Callable,
+        repository: LayeredRepository,
         kwargs: dict = None,
     ) -> T:
         kwargs = kwargs or {}
@@ -27,10 +31,10 @@ class Resolver:
 
     def get_dependencies(
         self,
-        factory: Callable,
-        repository: gimme.repository.LayeredRepository,
+        factory: t.Callable,
+        repository: LayeredRepository,
         kwargs: dict = None,
-    ) -> Dict[str, Any]:
+    ) -> t.Dict[str, t.Any]:
         """Override this to customize how to resolve the dependencies of a specific class /
         factory function. This method will be called with the following arguments:
 
@@ -53,41 +57,55 @@ class Resolver:
 class TypeHintingResolver(Resolver):
     def get_dependencies(
         self,
-        factory: Callable,
-        repository: gimme.repository.LayeredRepository,
+        factory: t.Callable,
+        repository: LayeredRepository,
         kwargs: dict = None,
-    ) -> Dict[str, Any]:
+    ) -> t.Dict[str, t.Any]:
         kwargs = kwargs or {}
         try:
             signature = inspect.signature(factory)
         except ValueError:  # some builtin types
             raise CannotResolve()
+        try:
+            type_hints = self.get_type_hints(factory, repository)
+        except NameError as e:
+            raise CannotResolve() from e
 
         dependencies = {}
         for key, param in signature.parameters.items():
             if key in kwargs or param.default is not inspect.Parameter.empty:
                 continue
-            annotation = param.annotation
-            if annotation is inspect.Parameter.empty:
-                raise CannotResolve(key)
+
+            try:
+                annotation = type_hints[key]
+            except KeyError as e:
+                raise CannotResolve(key) from e
+
             if hasattr(annotation, "__origin__"):
                 info = parse_type_hint(annotation)
                 if info:
                     dependencies[key] = info.collection(repository.get(info.inner_type, many=True))
                     continue
                 else:
-                    raise CannotResolve(key, param.annotation)
-            dependencies[key] = repository.get(param.annotation)
+                    raise CannotResolve(key, annotation)
+            dependencies[key] = repository.get(annotation)
         return dependencies
+
+    @staticmethod
+    def get_type_hints(obj, repository: LayeredRepository):
+        if isinstance(obj, type):
+            obj = obj.__init__
+
+        return t.get_type_hints(obj, localns=repository.types_by_str)
 
 
 class AttributeResolver(Resolver):
     def get_dependencies(
         self,
-        factory: Callable,
-        repository: gimme.repository.LayeredRepository,
+        factory: t.Callable,
+        repository: LayeredRepository,
         kwargs: dict = None,
-    ) -> Dict[str, Any]:
+    ) -> t.Dict[str, t.Any]:
         for attr in vars(factory).values():
             if isinstance(attr, Attribute) and not attr.lazy:
                 repository.get(attr.dependency)

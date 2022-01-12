@@ -1,26 +1,27 @@
+from __future__ import annotations
+
 from itertools import chain
-from typing import Iterable, List, Dict, Type, Union, Callable, TYPE_CHECKING
+import typing as t
 
 from .exceptions import CannotResolve, CircularDependency, PartiallyResolved
-from .helpers import _Stack, _LookupStack, EMPTY
-from .types import T, DependencyInfo
+from .helpers import EMPTY, _LookupStack, _Stack
+from .types import DependencyInfo, T
 
-if TYPE_CHECKING:
-    from .resolvers import Resolver
+from .resolvers import Resolver
 
 
 class SimpleRepository:
-    def __init__(self, resolvers: Iterable["Resolver"]):
+    def __init__(self, resolvers: t.Iterable[Resolver]):
 
-        self.resolvers: List["Resolver"] = list(resolvers)
-        self.types_by_str: Dict[str, Type[T]] = {}
-        self.types: Dict[Type, DependencyInfo] = {}
-        self.instances: Dict[Type[T], List[T]] = {}
+        self.resolvers: t.List[Resolver] = list(resolvers)
+        self.types_by_str: t.Dict[str, t.Type[T]] = {}
+        self.types: t.Dict[t.Type, DependencyInfo] = {}
+        self.instances: t.Dict[t.Type[T], t.List[T]] = {}
         self.lookup_stack = _LookupStack()
 
     def get(
-        self, key: Union[Type[T], str], many=False, repo=None, kwargs=None
-    ) -> Union[List[T], T]:
+        self, key: t.Union[t.Type[T], str], many=False, repo=None, kwargs=None
+    ) -> t.Union[t.List[T], T]:
         if isinstance(key, str):
             key = self.types_by_str.get(key)
         if key is None:
@@ -31,7 +32,7 @@ class SimpleRepository:
 
         if not isinstance(key, type) and callable(key):
             name = getattr(key, "__name__", str(key))
-            return self.resolve(name, key, repo=repo, kwargs=kwargs)
+            return self.resolve(factory=key, key=name, repo=repo, kwargs=kwargs)
 
         if kwargs is not None or key not in self.instances:
             inst = self.create(key, repo=repo, kwargs=kwargs)
@@ -40,7 +41,7 @@ class SimpleRepository:
         instances = self.instances[key]
         return instances[-1]
 
-    def create(self, key: Type[T], repo=None, kwargs=None) -> T:
+    def create(self, key: t.Type[T], repo=None, kwargs=None) -> T:
         """Instantiate the object and all its dependencies
         :param key: The class / factory function to instantiate
         :param repo: The current ``Repository`` used for requesting dependencies
@@ -58,13 +59,15 @@ class SimpleRepository:
         do_store = kwargs is None and info.store
         if kwargs is not None:
             kwargs = {**(info.kwargs or {}), **kwargs}
-        inst = self.resolve(key, info.factory, repo=repo, kwargs=kwargs)
+        inst = self.resolve(info.factory, key=key, repo=repo, kwargs=kwargs)
         if do_store:
             self.add(inst)
         return inst
 
-    def resolve(self, key, factory, repo=None, kwargs=None):
-        """"""
+    def resolve(self, factory, key, repo=None, kwargs=None):
+        """Resolve a factory function. This resolves all function parameters as dependencies,
+        runs the function and returns the result
+        """
         inst = EMPTY
         with self.lookup_stack.push(key):
             for plugin in self.resolvers:
@@ -75,7 +78,7 @@ class SimpleRepository:
             if inst is EMPTY:
                 raise CannotResolve(str(self.lookup_stack))
 
-    def _ensure_info(self, cls: Type[T]) -> DependencyInfo:
+    def _ensure_info(self, cls: t.Type[T]) -> DependencyInfo:
         info = self.types.get(cls)
         if info:
             return info
@@ -97,8 +100,8 @@ class SimpleRepository:
 
     def register(
         self,
-        cls: Type[T] = None,
-        factory: Callable = None,
+        cls: t.Type[T] = None,
+        factory: t.Callable = None,
         info: DependencyInfo = None,
         store=True,
         kwargs=None,
@@ -119,10 +122,10 @@ class SimpleRepository:
                 self.types_by_str[key] = base
                 self.types[base] = info
 
-    def add_resolver(self, resolver: "Resolver"):
+    def add_resolver(self, resolver: Resolver):
         self.resolvers.insert(0, resolver)
 
-    def __contains__(self, item: Type):
+    def __contains__(self, item: t.Type):
         return item in self.instances
 
 
@@ -134,7 +137,7 @@ class LayeredRepository(_Stack[SimpleRepository]):
     def current(self) -> SimpleRepository:
         return self[-1]
 
-    def get(self, key: Union[Type[T], str], many=False, kwargs=None) -> Union[List[T], T]:
+    def get(self, key: t.Union[t.Type[T], str], many=False, kwargs=None) -> t.Union[t.List[T], T]:
         err = None
 
         if many:
@@ -148,7 +151,7 @@ class LayeredRepository(_Stack[SimpleRepository]):
         if err:
             raise err
 
-    def create(self, key: Type[T]) -> T:
+    def create(self, key: t.Type[T]) -> T:
         return self.current.create(key, repo=self)
 
     def pop(self):
@@ -165,27 +168,5 @@ class LayeredRepository(_Stack[SimpleRepository]):
     def __getattr__(self, item):
         return getattr(self.current, item)
 
-    def __contains__(self, item: Type):
+    def __contains__(self, item: t.Type):
         return any(item in repo for repo in self)
-
-
-class Attribute:
-    name: str
-
-    def __init__(self, cls_or_name, repo: "LayeredRepository", lazy=True):
-        self.dependency = cls_or_name
-        self.lazy = lazy
-        self.repo = repo
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-
-        obj = instance.__dict__.get(self.name, EMPTY)
-        if obj is EMPTY:
-            obj = self.repo.get(self.dependency)
-            instance.__dict__[self.name] = obj
-        return obj
-
-    def __set_name__(self, owner, name):
-        self.name = name
