@@ -94,7 +94,8 @@ class TypeHintingResolver(Resolver):
     @staticmethod
     def get_type_hints(obj, repository: LayeredRepository):
         if isinstance(obj, type):
-            return t.get_type_hints(obj.__init__, localns=repository.types_by_str)
+            obj = obj.__init__
+
         return t.get_type_hints(obj, localns=repository.types_by_str)
 
 
