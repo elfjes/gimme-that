@@ -72,7 +72,7 @@ class TypeHintingResolver(Resolver):
         except NameError as e:
             raise CannotResolve() from e
 
-        # The signature a callable may differ from it's type annotations, for example when
+        # The signature of a callable may differ from its type annotations, for example when
         #  __new__ has been overridden with (*args, **kwargs) `inspect.signature` can then
         # not properly determine the signature. We have to make sure resolve any
         # non-variadic arguments that have no default value, as well as all parameters in
