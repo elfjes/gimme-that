@@ -16,7 +16,7 @@ from .repository import LayeredRepository, SimpleRepository
 from .resolvers import AttributeResolver, TypeHintingResolver
 from .types import DependencyInfo
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 __all__ = [
     "add",

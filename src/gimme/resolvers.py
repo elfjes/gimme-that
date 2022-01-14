@@ -66,15 +66,38 @@ class TypeHintingResolver(Resolver):
             signature = inspect.signature(factory)
         except ValueError:  # some builtin types
             raise CannotResolve()
+
         try:
             type_hints = self.get_type_hints(factory, repository)
         except NameError as e:
             raise CannotResolve() from e
 
+        # The signature of a callable may differ from its type annotations, for example when
+        #  __new__ has been overridden with (*args, **kwargs) `inspect.signature` can then
+        # not properly determine the signature. We have to make sure resolve any
+        # non-variadic arguments that have no default value, as well as all parameters in
+        # __annotations__ for arguments that do not have a default value
+
+        nonvariadic_params = {
+            name
+            for name, param in signature.parameters.items()
+            if param.kind not in (param.VAR_KEYWORD, param.VAR_POSITIONAL)
+        }
+        default_params = {
+            name
+            for name, param in signature.parameters.items()
+            if param.default is not param.empty
+        }
+        all_required = (
+            (nonvariadic_params | set(type_hints.keys()))
+            - default_params
+            - set(kwargs.keys())
+            - {"return"}  # return is a special annotation indiciting the return type
+        )
+
         dependencies = {}
-        for key, param in signature.parameters.items():
-            if key in kwargs or param.default is not inspect.Parameter.empty:
-                continue
+
+        for key in all_required:
 
             try:
                 annotation = type_hints[key]

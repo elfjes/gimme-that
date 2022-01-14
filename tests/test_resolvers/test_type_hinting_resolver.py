@@ -1,4 +1,4 @@
-from typing import Tuple
+import typing as t
 from unittest import mock
 from unittest.mock import Mock, call
 
@@ -47,7 +47,7 @@ def test_get_dependencies_for_class_with_dependencies(plugin, repo):
 
     assert plugin.get_dependencies(ClassWithDependencies, repo).keys() == {"a", "b"}
 
-    assert repo.get.call_args_list == [call(int), call(str)]
+    assert {call_args[0][0] for call_args in repo.get.call_args_list} == {int, str}
 
 
 def test_dont_resolve_dependency_that_is_also_in_kwargs(plugin, repo):
@@ -75,11 +75,11 @@ def test_get_dependencies_for_function(plugin, repo):
         pass
 
     assert plugin.get_dependencies(function, repo).keys() == {"a", "b", "d"}
-    assert repo.get.call_args_list == [call(int), call(str), call(set)]
+    assert {call_args[0][0] for call_args in repo.get.call_args_list} == {int, str, set}
 
 
 def test_get_dependencies_with_generic_type(plugin, repo):
-    def function(a: Tuple[int, ...]):
+    def function(a: t.Tuple[int, ...]):
         pass
 
     repo.get.return_value = [1, 2]
@@ -88,7 +88,7 @@ def test_get_dependencies_with_generic_type(plugin, repo):
 
 
 def test_cannot_resolve_invalid_type_hint(plugin, repo):
-    def function(a: Tuple[int, int]):
+    def function(a: t.Tuple[int, int]):
         pass
 
     with pytest.raises(CannotResolve):
@@ -99,3 +99,29 @@ def test_cannot_resolve_invalid_type_hint(plugin, repo):
 def test_raise_cannot_resolve_on_unresolvable_builtin_types(plugin, repo, tp):
     with pytest.raises(CannotResolve):
         plugin.get_dependencies(tp, repo)
+
+
+def test_ignores_variadic_positional_arguments(plugin, repo):
+    def func(*args):
+        return 42
+
+    assert plugin.get_dependencies(func, repo) == {}
+
+
+def test_ignores_variadic_keyword_arguments(plugin, repo):
+    def func(**kwargs):
+        return 42
+
+    assert plugin.get_dependencies(func, repo) == {}
+
+
+def test_with_overridden_new(plugin, repo):
+    class MyClass:
+        def __new__(cls, *args, **kwargs):
+            return object.__new__(cls)
+
+        def __init__(self, dep: int) -> None:
+            self.dep = dep
+
+    plugin.get_dependencies(MyClass, repo)
+    assert repo.get.call_args == call(int)
