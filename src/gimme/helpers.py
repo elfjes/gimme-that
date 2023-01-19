@@ -1,14 +1,14 @@
 import collections
 import typing as t
 
-from .types import T, TypeHintInfo
+from .types import T, CollectionTypeHintInfo
 
 
 def is_generic_type_hint(hint):
     return hasattr(hint, "__origin__")
 
 
-def parse_type_hint(hint) -> t.Optional[TypeHintInfo]:
+def parse_type_hint(hint) -> t.Optional[CollectionTypeHintInfo]:
     """
     Get the constructor for iterable/sequence type hints:
     returns the concrete type belonging to the type hint, ie `set` for `typing.Set`
@@ -18,14 +18,22 @@ def parse_type_hint(hint) -> t.Optional[TypeHintInfo]:
     `type`. eg for nested generic types (`List[List[int]]`)
     """
     # hint must be a Type hint of type Iterable, but not a Mapping
-    if (
-        not is_generic_type_hint(hint)
-        or hint.__origin__ is None  # py36
-        or not issubclass(hint.__origin__, collections.abc.Iterable)
-        or issubclass(hint.__origin__, collections.abc.Mapping)
-    ):
+    if not is_generic_type_hint(hint):
+        return None
+    origin = hint.__origin__
+
+    if not isinstance(origin, type):
         return None
 
+    if issubclass(origin, collections.abc.Iterable):
+        if issubclass(origin, collections.abc.Mapping):
+            return None
+        return parse_collection_type_hint(hint)
+
+    return origin
+
+
+def parse_collection_type_hint(hint):
     collection_type = hint.__origin__
 
     if issubclass(collection_type, tuple):
@@ -43,7 +51,7 @@ def parse_type_hint(hint) -> t.Optional[TypeHintInfo]:
     elif not isinstance(inner_type, (str, type)):
         return None
 
-    return TypeHintInfo(collection_type, inner_type)
+    return CollectionTypeHintInfo(collection_type, inner_type)
 
 
 class _Stack(list, t.List[T]):

@@ -10,6 +10,6 @@ class DependencyInfo(NamedTuple):
     kwargs: Optional[dict] = None
 
 
-class TypeHintInfo(NamedTuple):
+class CollectionTypeHintInfo(NamedTuple):
     collection: type
     inner_type: type
