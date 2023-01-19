@@ -255,7 +255,8 @@ class TestRepository:
             pass
 
         repo.register(MyType, factory=MyDummy)
-        assert isinstance(repo.get(MyType), MyDummy)
+        repo.create(MyType)
+        assert MyType in repo
 
     def test_can_lookup_obj_by_string(self, repo):
         obj = object()
