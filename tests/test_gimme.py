@@ -239,6 +239,24 @@ class TestRepository:
         info = gimme.types.DependencyInfo(MyList, MyList)
         assert repo.types == {MyList: info, list: info, object: info}
 
+    def test_can_add_for_different_type(self, repo):
+        class MyType:
+            pass
+
+        sentinel = object()
+        repo.add(sentinel, cls=MyType)
+        assert repo.get(MyType) is sentinel
+
+    def test_can_register_with_factory_function_for_different_type(self, repo):
+        class MyType:
+            pass
+
+        class MyDummy:
+            pass
+
+        repo.register(MyType, factory=MyDummy)
+        assert isinstance(repo.get(MyType), MyDummy)
+
     def test_can_lookup_obj_by_string(self, repo):
         obj = object()
         repo.add(obj)

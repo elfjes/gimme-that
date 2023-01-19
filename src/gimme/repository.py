@@ -111,13 +111,13 @@ class SimpleRepository:
 
         return False
 
-    def add(self, inst, deep=True):
+    def add(self, inst, cls=None, deep=True):
         def append_instance_to(key):
             if key not in self.instances:
                 self.instances[key] = []
             self.instances[key].append(inst)
 
-        cls = type(inst)
+        cls = cls if cls is not None else type(inst)
         self.register(cls)
         append_instance_to(cls)
         if deep:
