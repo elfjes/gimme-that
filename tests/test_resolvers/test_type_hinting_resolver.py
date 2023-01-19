@@ -125,3 +125,13 @@ def test_with_overridden_new(plugin, repo):
 
     plugin.get_dependencies(MyClass, repo)
     assert repo.get.call_args == call(int)
+
+
+def test_with_annotated_variadic_arguments(plugin, repo):
+    class MyClass:
+        def __init__(self, a: int, *args: t.Any, **kwargs: t.Any) -> None:
+            pass
+
+    plugin.get_dependencies(MyClass, repo)
+    assert repo.get.call_count == 1
+    assert repo.get.call_args == call(int)

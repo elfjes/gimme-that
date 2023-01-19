@@ -83,6 +83,11 @@ class TypeHintingResolver(Resolver):
             for name, param in signature.parameters.items()
             if param.kind not in (param.VAR_KEYWORD, param.VAR_POSITIONAL)
         }
+        variadic_params = {
+            name
+            for name, param in signature.parameters.items()
+            if param.kind in (param.VAR_KEYWORD, param.VAR_POSITIONAL)
+        }
         default_params = {
             name
             for name, param in signature.parameters.items()
@@ -90,6 +95,7 @@ class TypeHintingResolver(Resolver):
         }
         all_required = (
             (nonvariadic_params | set(type_hints.keys()))
+            - variadic_params
             - default_params
             - set(kwargs.keys())
             - {"return"}  # return is a special annotation indiciting the return type
