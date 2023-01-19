@@ -78,7 +78,7 @@ class SimpleRepository:
 
         inst = self.resolve(info.factory, key=key, repo=repo, kwargs=combined_kwargs)
         if do_store:
-            self.add(inst)
+            self.add(inst, cls=info.cls)
         return inst
 
     def resolve(self, factory, key, repo=None, kwargs=None):
