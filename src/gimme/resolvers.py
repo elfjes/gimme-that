@@ -5,8 +5,8 @@ import typing as t
 
 from gimme.attribute import Attribute
 from gimme.exceptions import CannotResolve, PartiallyResolved
-from gimme.helpers import parse_type_hint
-from gimme.types import T
+from gimme.helpers import is_generic_type_hint, parse_type_hint
+from gimme.types import T, CollectionTypeHintInfo
 
 if t.TYPE_CHECKING:
     from gimme.repository import LayeredRepository
@@ -73,7 +73,7 @@ class TypeHintingResolver(Resolver):
             raise CannotResolve() from e
 
         # The signature of a callable may differ from its type annotations, for example when
-        #  __new__ has been overridden with (*args, **kwargs) `inspect.signature` can then
+        # __new__ has been overridden with (*args, **kwargs), `inspect.signature` can then
         # not properly determine the signature. We have to make sure resolve any
         # non-variadic arguments that have no default value, as well as all parameters in
         # __annotations__ for arguments that do not have a default value
@@ -110,11 +110,15 @@ class TypeHintingResolver(Resolver):
             except KeyError as e:
                 raise CannotResolve(key) from e
 
-            if hasattr(annotation, "__origin__"):
-                info = parse_type_hint(annotation)
-                if info:
-                    dependencies[key] = info.collection(repository.get(info.inner_type, many=True))
+            if is_generic_type_hint(annotation):
+                result = parse_type_hint(annotation)
+                if isinstance(result, CollectionTypeHintInfo):
+                    dependencies[key] = result.collection(
+                        repository.get(result.inner_type, many=True)
+                    )
                     continue
+                elif result is not None:
+                    annotation = result
                 else:
                     raise CannotResolve(key, annotation)
             dependencies[key] = repository.get(annotation)

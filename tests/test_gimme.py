@@ -11,6 +11,7 @@ import gimme.repository
 import gimme.resolvers
 import gimme.types
 import pytest
+import typing as t
 
 
 class SimpleClass:
@@ -160,7 +161,7 @@ class TestResolveFunction:
 
         with pytest.raises(gimme.exceptions.CannotResolve) as exc:
             gimme.that(failing)
-        assert str(exc.value) == "failing"
+        assert "failing" in str(exc.value)
 
     def test_doenst_store_result(self, repo):
         def factory():
@@ -288,6 +289,20 @@ class TestRepository:
         repo.register(SimpleClass, store=False)
         assert repo.get(SimpleClass) is not repo.get(SimpleClass)
 
+    def test_generic_class(self, repo):
+        T = t.TypeVar("T")
+
+        class SomeGeneric(t.Generic[T]):
+            def __init__(self) -> None:
+                ...
+
+        class Depends(t.Generic[T]):
+            def __init__(self, generic: SomeGeneric[T]) -> None:
+                self.generic = generic
+
+        result = repo.get(Depends)
+        assert isinstance(result.generic, SomeGeneric)
+
 
 class TestWhenMultipleHaveBeenRegistered:
     def test_can_get_multiple_when_multiple_have_been_added(self, repo):
@@ -358,6 +373,24 @@ class TestContext:
             gimme.add("bla")
             obj = gimme.that(MyClass)
         assert (obj.a, obj.b) == (2, "bla")
+
+    def test_get_from_lower_layer(self):
+        class MyClass:
+            def __init__(self, a=None) -> None:
+                self.a = a
+
+        gimme.add(MyClass(42))
+        with gimme.context():
+            assert gimme.that(MyClass).a == 42
+
+    def test_read_dependency_info_from_lower_layer(self):
+        class MyClass:
+            def __init__(self, a=None) -> None:
+                self.a = a
+
+        gimme.register(MyClass, lambda: MyClass(a=42))
+        with gimme.context():
+            assert gimme.that(MyClass).a == 42
 
 
 class TestExceptions:

@@ -10,6 +10,22 @@ from .types import DependencyInfo, T
 from .resolvers import Resolver
 
 
+class BaseRepository:
+    def get(
+        self, key: t.Union[t.Type[T], str], many=False, repo=None, kwargs=None
+    ) -> t.Union[t.List[T], T]:
+        raise NotImplementedError
+
+    def get_instance(self, key: t.Union[t.Type[T], str]):
+        raise NotImplementedError
+
+    def create(self, key: t.Type[T], repo=None, kwargs=None) -> T:
+        raise NotImplementedError
+
+    def _ensure_info(self, cls: t.Type[T]) -> DependencyInfo:
+        raise NotImplementedError
+
+
 class SimpleRepository:
     def __init__(self, resolvers: t.Iterable[Resolver]):
 
@@ -20,7 +36,7 @@ class SimpleRepository:
         self.lookup_stack = _LookupStack()
 
     def get(
-        self, key: t.Union[t.Type[T], str], many=False, repo=None, kwargs=None
+        self, key: t.Union[t.Callable[..., T], str], many=False, repo=None, kwargs=None
     ) -> t.Union[t.List[T], T]:
         if isinstance(key, str):
             key = self.types_by_str.get(key)
@@ -31,7 +47,8 @@ class SimpleRepository:
             return self.instances.get(key, [])
 
         if not isinstance(key, type) and callable(key):
-            name = getattr(key, "__name__", str(key))
+            # Key is a factory function
+            name = getattr(key, "__qualname__", getattr(key, "__name__", str(key)))
             return self.resolve(factory=key, key=name, repo=repo, kwargs=kwargs)
 
         if kwargs is not None or key not in self.instances:
@@ -84,6 +101,15 @@ class SimpleRepository:
             return info
         self.register(cls)
         return self._ensure_info(cls)
+
+    def knows_about(self, key: t.Union[t.Callable[..., T], str]):
+        if isinstance(key, str):
+            return key in self.types_by_str
+
+        if isinstance(key, type):
+            return key in self.types
+
+        return False
 
     def add(self, inst, deep=True):
         def append_instance_to(key):
@@ -142,6 +168,13 @@ class LayeredRepository(_Stack[SimpleRepository]):
 
         if many:
             return list(chain.from_iterable(repo.get(key, many) for repo in self))
+
+        for repo in reversed(self):
+            if repo.knows_about(key):
+                try:
+                    return repo.get(key, many, repo=self, kwargs=kwargs)
+                except CannotResolve as e:
+                    err = e
 
         for repo in reversed(self):
             try:
